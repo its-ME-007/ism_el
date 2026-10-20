@@ -1,0 +1,182 @@
+# Default configuration for Context-Aware Predictive Storage Tiering System
+
+# ============================================================================
+# Seed Configuration
+# ============================================================================
+seed: 42
+deterministic_mode: true
+
+# ============================================================================
+# Dataset Generation Configuration
+# ============================================================================
+dataset:
+  num_files: 1000
+  category_distribution:
+    Finance: 0.15
+    Legal: 0.10
+    HR: 0.10
+    Engineering: 0.15
+    Research: 0.15
+    Marketing: 0.10
+    Operations: 0.10
+    Security: 0.10
+    System: 0.05
+  size_distribution:
+    mean_bytes: 1000000  # 1 MB average
+    std_bytes: 500000    # 500 KB std dev
+    min_bytes: 10000     # 10 KB minimum
+    max_bytes: 100000000 # 100 MB maximum
+
+# ============================================================================
+# Workload Generation Configuration
+# ============================================================================
+workload:
+  duration_hours: 720  # 30 days
+  pattern_distribution:
+    hot: 0.2    # 20% hot (frequent recent access)
+    warm: 0.3   # 30% warm (moderate access)
+    cold: 0.4   # 40% cold (rare access)
+    seasonal: 0.1  # 10% seasonal (periodic access)
+  
+  # Hot pattern parameters
+  hot_base_frequency: 10.0  # accesses per hour
+  hot_decay_hours: 24.0     # decay period
+  
+  # Warm pattern parameters
+  warm_base_frequency: 1.0  # accesses per hour
+  
+  # Cold pattern parameters
+  cold_base_frequency: 0.1  # accesses per hour
+  
+  # Seasonal pattern parameters
+  seasonal_period_hours: 24.0    # daily cycle
+  seasonal_amplitude_factor: 0.7
+
+# ============================================================================
+# Simulation Configuration
+# ============================================================================
+simulation:
+  duration_hours: 720           # Total simulation duration
+  decision_interval_hours: 1.0  # Tiering decision frequency
+  
+  # Tier Configurations
+  tiers:
+    HOT:
+      latency_ms: 1.0
+      cost_per_gb_month: 0.02
+      capacity_gb: 1000.0
+      throughput_mbps: 1000.0
+    
+    WARM:
+      latency_ms: 10.0
+      cost_per_gb_month: 0.01
+      capacity_gb: 10000.0
+      throughput_mbps: 100.0
+    
+    COLD:
+      latency_ms: 100.0
+      cost_per_gb_month: 0.001
+      capacity_gb: 100000.0
+      throughput_mbps: 10.0
+
+# ============================================================================
+# Migration Controller Configuration
+# ============================================================================
+migration:
+  confidence_threshold: 0.7    # Minimum confidence to execute migration
+  hysteresis_count: 3          # Decision points to sustain before migrating
+  cooldown_hours: 6.0          # Mandatory waiting between migrations
+
+# ============================================================================
+# Feature Extraction Configuration
+# ============================================================================
+features:
+  workload:
+    window_sizes_hours: [1, 24, 168, 720]  # 1h, 24h, 7d, 30d
+    normalization: 'standard'  # 'standard' or 'minmax'
+  
+  semantic:
+    tfidf:
+      max_features: 1000
+      ngram_range: [1, 2]
+      remove_stopwords: true
+    
+    embeddings:
+      model_name: 'all-MiniLM-L6-v2'
+      embedding_dim: 384
+      batch_size: 32
+      device: 'cuda'  # 'cuda' or 'cpu'
+  
+  rag:
+    top_k_retrieval: 5
+    confidence_threshold: 0.7
+    extraction_method: 'fallback'  # 'llm', 'fallback', 'deterministic'
+
+# ============================================================================
+# Model Configuration
+# ============================================================================
+models:
+  tier_classifier:
+    type: 'xgboost'
+    hyperparameters:
+      max_depth: 6
+      learning_rate: 0.1
+      n_estimators: 100
+      objective: 'multi:softprob'
+      num_class: 3
+    
+    train_test_split: 0.8
+    cross_validation_folds: 5
+  
+  future_predictor:
+    type: 'xgboost'
+    prediction_window_hours: 24.0
+    hyperparameters:
+      max_depth: 5
+      learning_rate: 0.1
+      n_estimators: 100
+      objective: 'reg:squarederror'
+    
+    train_test_split: 0.8
+
+# ============================================================================
+# Baseline Configuration
+# ============================================================================
+baselines:
+  lru:
+    tier_capacities:
+      HOT: 1000.0  # GB
+      WARM: 10000.0
+      COLD: 100000.0
+  
+  lfu:
+    tier_capacities:
+      HOT: 1000.0
+      WARM: 10000.0
+      COLD: 100000.0
+    frequency_window_hours: 24.0
+  
+  age_based:
+    age_thresholds:
+      HOT_to_WARM_hours: 24.0    # Move to WARM after 1 day
+      WARM_to_COLD_hours: 168.0  # Move to COLD after 7 days
+
+# ============================================================================
+# Output Configuration
+# ============================================================================
+output:
+  data_dir: 'data/generated'
+  models_dir: 'results/models'
+  metrics_dir: 'results/metrics'
+  plots_dir: 'results/plots'
+  logs_dir: 'results/logs'
+  
+  save_intermediate_models: true
+  save_feature_importance: true
+
+# ============================================================================
+# Logging Configuration
+# ============================================================================
+logging:
+  level: 'INFO'  # 'DEBUG', 'INFO', 'WARNING', 'ERROR'
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'

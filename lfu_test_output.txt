@@ -1,0 +1,70 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.6, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\Lenovo\AppData\Local\Programs\Python\Python313\python.exe
+cachedir: .pytest_cache
+hypothesis profile 'default'
+rootdir: D:\ism
+plugins: anyio-4.10.0, hypothesis-6.170.2, cov-7.1.0
+collecting ... collected 1 item
+
+tests/test_lfu_baseline.py::TestCapacityManagement::test_capacity_overflow_cascading_demotion FAILED
+
+================================== FAILURES ===================================
+______ TestCapacityManagement.test_capacity_overflow_cascading_demotion _______
+tests\test_lfu_baseline.py:284: in test_capacity_overflow_cascading_demotion
+    assert occupancy[Tier.HOT] == 3.0  # Only file1
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   assert 0.0 == 3.0
+============================== warnings summary ===============================
+src\tiering\ingestion\schemas.py:44
+  D:\ism\src\tiering\ingestion\schemas.py:44: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class FileDocument(BaseModel):
+
+src\tiering\ingestion\schemas.py:59
+  D:\ism\src\tiering\ingestion\schemas.py:59: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class AccessEvent(BaseModel):
+
+C:\Users\Lenovo\AppData\Local\Programs\Python\Python313\Lib\site-packages\pydantic\_internal\_generate_schema.py:325
+  C:\Users\Lenovo\AppData\Local\Programs\Python\Python313\Lib\site-packages\pydantic\_internal\_generate_schema.py:325: PydanticDeprecatedSince20: `json_encoders` is deprecated. See https://docs.pydantic.dev/2.13/concepts/serialization/#custom-serializers for alternatives. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    warnings.warn(
+
+src\tiering\ingestion\schemas.py:73
+  D:\ism\src\tiering\ingestion\schemas.py:73: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class WorkloadPattern(BaseModel):
+
+src\tiering\ingestion\schemas.py:85
+  D:\ism\src\tiering\ingestion\schemas.py:85: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class WorkloadPatternSpec(BaseModel):
+
+src\tiering\ingestion\schemas.py:97
+  D:\ism\src\tiering\ingestion\schemas.py:97: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class TierConfig(BaseModel):
+
+src\tiering\ingestion\schemas.py:167
+  D:\ism\src\tiering\ingestion\schemas.py:167: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class TierPrediction(BaseModel):
+
+src\tiering\ingestion\schemas.py:186
+  D:\ism\src\tiering\ingestion\schemas.py:186: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class MigrationDecision(BaseModel):
+
+src\tiering\ingestion\schemas.py:198
+  D:\ism\src\tiering\ingestion\schemas.py:198: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class MigrationCost(BaseModel):
+
+src\tiering\ingestion\schemas.py:211
+  D:\ism\src\tiering\ingestion\schemas.py:211: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class DatasetConfig(BaseModel):
+
+src\tiering\ingestion\schemas.py:223
+  D:\ism\src\tiering\ingestion\schemas.py:223: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class WorkloadConfig(BaseModel):
+
+src\tiering\ingestion\schemas.py:236
+  D:\ism\src\tiering\ingestion\schemas.py:236: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SimulationConfig(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_lfu_baseline.py::TestCapacityManagement::test_capacity_overflow_cascading_demotion
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!
+======================= 1 failed, 12 warnings in 1.03s ========================

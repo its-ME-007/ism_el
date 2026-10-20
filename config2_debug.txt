@@ -1,0 +1,170 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.6, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\Lenovo\AppData\Local\Programs\Python\Python313\python.exe
+cachedir: .pytest_cache
+hypothesis profile 'default'
+rootdir: D:\ism
+plugins: anyio-4.10.0, hypothesis-6.170.2, cov-7.1.0
+collecting ... collected 1 item
+
+tests/test_config_system.py::TestConfigIntegration::test_load_and_validate_default_config FAILED
+
+================================== FAILURES ===================================
+_________ TestConfigIntegration.test_load_and_validate_default_config _________
+
+self = <tests.test_config_system.TestConfigIntegration object at 0x000002BF062579D0>
+
+    def test_load_and_validate_default_config(self):
+        """Test loading and validating default configuration."""
+        loader = ConfigLoader(Path("configs"))
+        config = loader.load("default")
+    
+        validator = ConfigurationValidator()
+    
+        # Validate different sections
+        if "dataset" in config:
+            validator.validate_dataset_config(config["dataset"])
+    
+        if "workload" in config:
+            validator.validate_workload_config(config["workload"])
+    
+        if "simulation" in config:
+>           validator.validate_simulation_config(config["simulation"])
+
+tests\test_config_system.py:347: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\tiering\config\validation.py:420: in validate_simulation_config
+    return self.validator.validate(config, self._predefined_schemas['simulation'])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <src.tiering.config.validation.ConfigValidator object at 0x000002BF062D0AD0>
+config = {'duration_hours': 720, 'decision_interval_hours': 1.0, 'tiers': {'HOT': {'latency_ms': 1.0, 'cost_per_gb_month': 0.02...: 100.0}, 'COLD': {'latency_ms': 100.0, 'cost_per_gb_month': 0.001, 'capacity_gb': 100000.0, 'throughput_mbps': 10.0}}}
+schema = {'$schema': 'http://json-schema.org/draft-07/schema#', 'type': 'object', 'properties': {'duration_hours': {'type': 'nu...s'}, 'seed': {'type': 'integer', 'description': 'Random seed for reproducibility'}}, 'additionalProperties': True, ...}
+
+    def validate(
+        self,
+        config: Dict[str, Any],
+        schema: Dict[str, Any]
+    ) -> bool:
+        """
+        Validate a configuration against a schema.
+    
+        Args:
+            config: Configuration dictionary to validate
+            schema: JSON schema dictionary
+    
+        Returns:
+            True if valid
+    
+        Raises:
+            ValidationError: If validation fails
+        """
+        validator = Draft7Validator(schema)
+    
+        # Collect all errors
+        errors = list(validator.iter_errors(config))
+    
+        if errors:
+            error_messages = [str(e.message) for e in errors]
+            error_text = "\n".join(error_messages)
+            logger.error(f"Configuration validation failed:\n{error_text}")
+    
+            # Raise the first error
+>           raise errors[0]
+E           jsonschema.exceptions.ValidationError: 'seed' is a required property
+E           
+E           Failed validating 'required' in schema:
+E               {'$schema': 'http://json-schema.org/draft-07/schema#',
+E                'type': 'object',
+E                'properties': {'duration_hours': {'type': 'number',
+E                                                  'minimum': 0.1,
+E                                                  'description': 'Simulation duration '
+E                                                                 'in hours'},
+E                               'decision_interval_hours': {'type': 'number',
+E                                                           'minimum': 0.01,
+E                                                           'description': 'Interval '
+E                                                                          'between '
+E                                                                          'tiering '
+E                                                                          'decisions '
+E                                                                          'in hours'},
+E                               'seed': {'type': 'integer',
+E                                        'description': 'Random seed for '
+E                                                       'reproducibility'}},
+E                'additionalProperties': True,
+E                'description': 'Configuration schema for simulation',
+E                'required': ['duration_hours', 'decision_interval_hours', 'seed']}
+E           
+E           On instance:
+E               {'duration_hours': 720,
+E                'decision_interval_hours': 1.0,
+E                'tiers': {'HOT': {'latency_ms': 1.0,
+E                                  'cost_per_gb_month': 0.02,
+E                                  'capacity_gb': 1000.0,
+E                                  'throughput_mbps': 1000.0},
+E                          'WARM': {'latency_ms': 10.0,
+E                                   'cost_per_gb_month': 0.01,
+E                                   'capacity_gb': 10000.0,
+E                                   'throughput_mbps': 100.0},
+E                          'COLD': {'latency_ms': 100.0,
+E                                   'cost_per_gb_month': 0.001,
+E                                   'capacity_gb': 100000.0,
+E                                   'throughput_mbps': 10.0}}}
+
+src\tiering\config\validation.py:107: ValidationError
+------------------------------ Captured log call ------------------------------
+ERROR    src.tiering.config.validation:validation.py:104 Configuration validation failed:
+'seed' is a required property
+============================== warnings summary ===============================
+src\tiering\ingestion\schemas.py:44
+  D:\ism\src\tiering\ingestion\schemas.py:44: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class FileDocument(BaseModel):
+
+src\tiering\ingestion\schemas.py:59
+  D:\ism\src\tiering\ingestion\schemas.py:59: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class AccessEvent(BaseModel):
+
+C:\Users\Lenovo\AppData\Local\Programs\Python\Python313\Lib\site-packages\pydantic\_internal\_generate_schema.py:325
+  C:\Users\Lenovo\AppData\Local\Programs\Python\Python313\Lib\site-packages\pydantic\_internal\_generate_schema.py:325: PydanticDeprecatedSince20: `json_encoders` is deprecated. See https://docs.pydantic.dev/2.13/concepts/serialization/#custom-serializers for alternatives. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    warnings.warn(
+
+src\tiering\ingestion\schemas.py:73
+  D:\ism\src\tiering\ingestion\schemas.py:73: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class WorkloadPattern(BaseModel):
+
+src\tiering\ingestion\schemas.py:85
+  D:\ism\src\tiering\ingestion\schemas.py:85: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class WorkloadPatternSpec(BaseModel):
+
+src\tiering\ingestion\schemas.py:97
+  D:\ism\src\tiering\ingestion\schemas.py:97: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class TierConfig(BaseModel):
+
+src\tiering\ingestion\schemas.py:167
+  D:\ism\src\tiering\ingestion\schemas.py:167: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class TierPrediction(BaseModel):
+
+src\tiering\ingestion\schemas.py:186
+  D:\ism\src\tiering\ingestion\schemas.py:186: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class MigrationDecision(BaseModel):
+
+src\tiering\ingestion\schemas.py:198
+  D:\ism\src\tiering\ingestion\schemas.py:198: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class MigrationCost(BaseModel):
+
+src\tiering\ingestion\schemas.py:211
+  D:\ism\src\tiering\ingestion\schemas.py:211: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class DatasetConfig(BaseModel):
+
+src\tiering\ingestion\schemas.py:223
+  D:\ism\src\tiering\ingestion\schemas.py:223: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class WorkloadConfig(BaseModel):
+
+src\tiering\ingestion\schemas.py:236
+  D:\ism\src\tiering\ingestion\schemas.py:236: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SimulationConfig(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_config_system.py::TestConfigIntegration::test_load_and_validate_default_config
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!
+======================= 1 failed, 12 warnings in 1.21s ========================

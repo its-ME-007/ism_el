@@ -1,0 +1,112 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.6, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\Lenovo\AppData\Local\Programs\Python\Python313\python.exe
+cachedir: .pytest_cache
+hypothesis profile 'default'
+rootdir: D:\ism
+plugins: anyio-4.10.0, hypothesis-6.170.2, cov-7.1.0
+collecting ... collected 5 items
+
+tests/test_dataset_generator.py::TestDatasetGenerator::test_jsonl_output_format FAILED [ 20%]
+tests/test_lfu_baseline.py::TestFrequencyDecay::test_no_frequency_decay_when_disabled FAILED [ 40%]
+tests/test_lfu_baseline.py::TestCapacityManagement::test_capacity_overflow_cascading_demotion FAILED [ 60%]
+tests/test_lru_baseline.py::TestLRUDemotion::test_demote_least_recently_used_from_hot FAILED [ 80%]
+tests/test_workload_generator.py::TestEventGeneration::test_generate_seasonal_events_has_period FAILED [100%]
+
+================================== FAILURES ===================================
+________________ TestDatasetGenerator.test_jsonl_output_format ________________
+tests\test_dataset_generator.py:205: in test_jsonl_output_format
+    generator.to_jsonl(output_path)
+src\tiering\ingestion\dataset_generator.py:466: in to_jsonl
+    f.write(json_line + "\n")
+C:\Users\Lenovo\AppData\Local\Programs\Python\Python313\Lib\encodings\cp1252.py:19: in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   UnicodeEncodeError: 'charmap' codec can't encode character '\u2713' in position 151: character maps to <undefined>
+__________ TestFrequencyDecay.test_no_frequency_decay_when_disabled ___________
+tests\test_lfu_baseline.py:215: in test_no_frequency_decay_when_disabled
+    assert frequency == 5
+E   assert 0 == 5
+______ TestCapacityManagement.test_capacity_overflow_cascading_demotion _______
+tests\test_lfu_baseline.py:284: in test_capacity_overflow_cascading_demotion
+    assert occupancy[Tier.HOT] == 3.0  # Only file1
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   assert 0.0 == 3.0
+__________ TestLRUDemotion.test_demote_least_recently_used_from_hot ___________
+tests\test_lru_baseline.py:222: in test_demote_least_recently_used_from_hot
+    assert len([d for d in decisions if d.source_tier == Tier.HOT]) > 0
+E   assert 0 > 0
+E    +  where 0 = len([])
+________ TestEventGeneration.test_generate_seasonal_events_has_period _________
+tests\test_workload_generator.py:377: in test_generate_seasonal_events_has_period
+    assert last_event_hour > 24  # Should span beyond first period
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   assert 13.218611315277778 > 24
+============================== warnings summary ===============================
+src\tiering\ingestion\schemas.py:44
+  D:\ism\src\tiering\ingestion\schemas.py:44: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class FileDocument(BaseModel):
+
+src\tiering\ingestion\schemas.py:59
+  D:\ism\src\tiering\ingestion\schemas.py:59: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class AccessEvent(BaseModel):
+
+C:\Users\Lenovo\AppData\Local\Programs\Python\Python313\Lib\site-packages\pydantic\_internal\_generate_schema.py:325
+  C:\Users\Lenovo\AppData\Local\Programs\Python\Python313\Lib\site-packages\pydantic\_internal\_generate_schema.py:325: PydanticDeprecatedSince20: `json_encoders` is deprecated. See https://docs.pydantic.dev/2.13/concepts/serialization/#custom-serializers for alternatives. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    warnings.warn(
+
+src\tiering\ingestion\schemas.py:73
+  D:\ism\src\tiering\ingestion\schemas.py:73: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class WorkloadPattern(BaseModel):
+
+src\tiering\ingestion\schemas.py:85
+  D:\ism\src\tiering\ingestion\schemas.py:85: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class WorkloadPatternSpec(BaseModel):
+
+src\tiering\ingestion\schemas.py:97
+  D:\ism\src\tiering\ingestion\schemas.py:97: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class TierConfig(BaseModel):
+
+src\tiering\ingestion\schemas.py:167
+  D:\ism\src\tiering\ingestion\schemas.py:167: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class TierPrediction(BaseModel):
+
+src\tiering\ingestion\schemas.py:186
+  D:\ism\src\tiering\ingestion\schemas.py:186: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class MigrationDecision(BaseModel):
+
+src\tiering\ingestion\schemas.py:198
+  D:\ism\src\tiering\ingestion\schemas.py:198: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class MigrationCost(BaseModel):
+
+src\tiering\ingestion\schemas.py:211
+  D:\ism\src\tiering\ingestion\schemas.py:211: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class DatasetConfig(BaseModel):
+
+src\tiering\ingestion\schemas.py:223
+  D:\ism\src\tiering\ingestion\schemas.py:223: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class WorkloadConfig(BaseModel):
+
+src\tiering\ingestion\schemas.py:236
+  D:\ism\src\tiering\ingestion\schemas.py:236: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SimulationConfig(BaseModel):
+
+tests/test_dataset_generator.py::TestDatasetGenerator::test_jsonl_output_format
+tests/test_dataset_generator.py::TestDatasetGenerator::test_jsonl_output_format
+tests/test_dataset_generator.py::TestDatasetGenerator::test_jsonl_output_format
+  D:\ism\src\tiering\ingestion\dataset_generator.py:464: PydanticDeprecatedSince20: The `dict` method is deprecated; use `model_dump` instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    validated = FileDocument(**file_doc.dict())
+
+tests/test_dataset_generator.py::TestDatasetGenerator::test_jsonl_output_format
+tests/test_dataset_generator.py::TestDatasetGenerator::test_jsonl_output_format
+tests/test_dataset_generator.py::TestDatasetGenerator::test_jsonl_output_format
+  D:\ism\src\tiering\ingestion\dataset_generator.py:465: PydanticDeprecatedSince20: The `json` method is deprecated; use `model_dump_json` instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    json_line = validated.json()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_dataset_generator.py::TestDatasetGenerator::test_jsonl_output_format
+FAILED tests/test_lfu_baseline.py::TestFrequencyDecay::test_no_frequency_decay_when_disabled
+FAILED tests/test_lfu_baseline.py::TestCapacityManagement::test_capacity_overflow_cascading_demotion
+FAILED tests/test_lru_baseline.py::TestLRUDemotion::test_demote_least_recently_used_from_hot
+FAILED tests/test_workload_generator.py::TestEventGeneration::test_generate_seasonal_events_has_period
+======================= 5 failed, 18 warnings in 1.08s ========================

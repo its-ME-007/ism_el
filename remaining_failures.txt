@@ -1,0 +1,124 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.6, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\Lenovo\AppData\Local\Programs\Python\Python313\python.exe
+cachedir: .pytest_cache
+hypothesis profile 'default'
+rootdir: D:\ism
+plugins: anyio-4.10.0, hypothesis-6.170.2, cov-7.1.0
+collecting ... collected 4 items
+
+tests/test_config_system.py::TestConfigIntegration::test_load_and_validate_default_config FAILED [ 25%]
+tests/test_lfu_baseline.py::TestCapacityManagement::test_capacity_overflow_cascading_demotion FAILED [ 50%]
+tests/test_lru_baseline.py::TestLRUDemotion::test_demote_least_recently_used_from_hot FAILED [ 75%]
+tests/test_workload_generator.py::TestEventGeneration::test_generate_seasonal_events_has_period FAILED [100%]
+
+================================== FAILURES ===================================
+E   jsonschema.exceptions.ValidationError: 'seed' is a required property
+    
+    Failed validating 'required' in schema:
+        {'$schema': 'http://json-schema.org/draft-07/schema#',
+         'type': 'object',
+         'properties': {'num_files': {'type': 'integer',
+                                      'minimum': 1,
+                                      'description': 'Number of files to '
+                                                     'generate'},
+                        'category_distribution': {'type': 'object',
+                                                  'description': 'Distribution '
+                                                                 'over file '
+                                                                 'categories',
+                                                  'additionalProperties': {'type': 'number',
+                                                                           'minimum': 0,
+                                                                           'maximum': 1}},
+                        'size_distribution': {'type': 'object',
+                                              'properties': {'mean_bytes': {'type': 'integer',
+                                                                            'minimum': 0},
+                                                             'std_bytes': {'type': 'integer',
+                                                                           'minimum': 0}}},
+                        'seed': {'type': 'integer',
+                                 'description': 'Random seed for '
+                                                'reproducibility'}},
+         'additionalProperties': True,
+         'description': 'Configuration schema for dataset generation',
+         'required': ['num_files', 'seed']}
+    
+    On instance:
+        {'num_files': 1000,
+         'category_distribution': {'Finance': 0.15,
+                                   'Legal': 0.1,
+                                   'HR': 0.1,
+                                   'Engineering': 0.15,
+                                   'Research': 0.15,
+                                   'Marketing': 0.1,
+                                   'Operations': 0.1,
+                                   'Security': 0.1,
+                                   'System': 0.05},
+         'size_distribution': {'mean_bytes': 1000000,
+                               'std_bytes': 500000,
+                               'min_bytes': 10000,
+                               'max_bytes': 100000000}}
+------------------------------ Captured log call ------------------------------
+ERROR    src.tiering.config.validation:validation.py:104 Configuration validation failed:
+'seed' is a required property
+D:\ism\src\tiering\config\validation.py:107: jsonschema.exceptions.ValidationError: 'seed' is a required property
+E   assert 0.0 == 3.0
+D:\ism\tests\test_lfu_baseline.py:284: assert 0.0 == 3.0
+E   assert 0 > 0
+     +  where 0 = len([])
+D:\ism\tests\test_lru_baseline.py:222: assert 0 > 0
+E   assert 13.218611315277778 > 24
+D:\ism\tests\test_workload_generator.py:377: assert 13.218611315277778 > 24
+============================== warnings summary ===============================
+src\tiering\ingestion\schemas.py:44
+  D:\ism\src\tiering\ingestion\schemas.py:44: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class FileDocument(BaseModel):
+
+src\tiering\ingestion\schemas.py:59
+  D:\ism\src\tiering\ingestion\schemas.py:59: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class AccessEvent(BaseModel):
+
+C:\Users\Lenovo\AppData\Local\Programs\Python\Python313\Lib\site-packages\pydantic\_internal\_generate_schema.py:325
+  C:\Users\Lenovo\AppData\Local\Programs\Python\Python313\Lib\site-packages\pydantic\_internal\_generate_schema.py:325: PydanticDeprecatedSince20: `json_encoders` is deprecated. See https://docs.pydantic.dev/2.13/concepts/serialization/#custom-serializers for alternatives. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    warnings.warn(
+
+src\tiering\ingestion\schemas.py:73
+  D:\ism\src\tiering\ingestion\schemas.py:73: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class WorkloadPattern(BaseModel):
+
+src\tiering\ingestion\schemas.py:85
+  D:\ism\src\tiering\ingestion\schemas.py:85: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class WorkloadPatternSpec(BaseModel):
+
+src\tiering\ingestion\schemas.py:97
+  D:\ism\src\tiering\ingestion\schemas.py:97: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class TierConfig(BaseModel):
+
+src\tiering\ingestion\schemas.py:167
+  D:\ism\src\tiering\ingestion\schemas.py:167: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class TierPrediction(BaseModel):
+
+src\tiering\ingestion\schemas.py:186
+  D:\ism\src\tiering\ingestion\schemas.py:186: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class MigrationDecision(BaseModel):
+
+src\tiering\ingestion\schemas.py:198
+  D:\ism\src\tiering\ingestion\schemas.py:198: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class MigrationCost(BaseModel):
+
+src\tiering\ingestion\schemas.py:211
+  D:\ism\src\tiering\ingestion\schemas.py:211: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class DatasetConfig(BaseModel):
+
+src\tiering\ingestion\schemas.py:223
+  D:\ism\src\tiering\ingestion\schemas.py:223: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class WorkloadConfig(BaseModel):
+
+src\tiering\ingestion\schemas.py:236
+  D:\ism\src\tiering\ingestion\schemas.py:236: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SimulationConfig(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_config_system.py::TestConfigIntegration::test_load_and_validate_default_config
+FAILED tests/test_lfu_baseline.py::TestCapacityManagement::test_capacity_overflow_cascading_demotion
+FAILED tests/test_lru_baseline.py::TestLRUDemotion::test_demote_least_recently_used_from_hot
+FAILED tests/test_workload_generator.py::TestEventGeneration::test_generate_seasonal_events_has_period
+======================= 4 failed, 12 warnings in 1.03s ========================
