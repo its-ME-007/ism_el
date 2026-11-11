@@ -1,0 +1,19 @@
+# Python and local environments
+__pycache__/
+*.py[cod]
+.venv/
+
+# Test and tool scratch directories
+.pytest-temp/
+.pytest-tmp/
+.pytest-cache/
+.pytest-*/
+
+# Downloaded/processed corpora and generated research artifacts stay local.
+data/raw/*
+!data/raw/**/SOURCE.md
+data/processed/
+results/
+results/models/
+results/datasets/
+results/metrics/*.txt

@@ -1,0 +1,22 @@
+{
+  "document_id": "demo-finance-report",
+  "filename": "quarterly-report.txt",
+  "text": "Quarterly financial report covering revenue, expenses, forecasts, and cash flow.",
+  "category": "Finance",
+  "size_bytes": 8192,
+  "created_at": "2024-12-01T00:00:00Z",
+  "modified_at": "2024-12-20T00:00:00Z",
+  "metadata": {
+    "file_type": "document",
+    "department": "Finance",
+    "confidentiality": "internal",
+    "indexed": true,
+    "compressed": false
+  },
+  "cutoff": "2025-01-21T00:00:00Z",
+  "access_events": [
+    {"timestamp": "2025-01-20T06:00:00Z", "operation": "read", "size_bytes": 8192},
+    {"timestamp": "2025-01-20T18:00:00Z", "operation": "read", "size_bytes": 8192},
+    {"timestamp": "2025-01-21T00:00:00Z", "operation": "read", "size_bytes": 8192}
+  ]
+}

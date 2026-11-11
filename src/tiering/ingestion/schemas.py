@@ -236,6 +236,7 @@ class SimulationMetrics(BaseModel):
     avg_access_latency_ms: float = Field(ge=0)
     p95_access_latency_ms: float = Field(ge=0)
     total_storage_cost: float = Field(ge=0)
+    total_migration_cost: float = Field(default=0.0, ge=0)
     cache_hit_rate: float = Field(ge=0, le=1)
     
 

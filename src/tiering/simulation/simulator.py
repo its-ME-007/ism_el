@@ -1,7 +1,7 @@
 """Discrete event simulation of storage access and tier migration."""
 
 from collections import defaultdict
-from datetime import timedelta
+from datetime import datetime, timedelta
 import time
 
 import numpy as np
@@ -30,20 +30,30 @@ class SimPySimulator:
             return SimulationResult(
                 metrics=SimulationMetrics(total_accesses=0, total_migrations=0,
                                           avg_access_latency_ms=0, p95_access_latency_ms=0,
-                                          total_storage_cost=0, cache_hit_rate=0),
+                                          total_storage_cost=0, total_migration_cost=0,
+                                          cache_hit_rate=0),
                 migrations=[], tier_distribution_timeline=[],
                 execution_time_seconds=time.perf_counter() - started)
 
         env = simpy.Environment()
         origin = events[0].timestamp
+        evaluation_start = self.config.get("evaluation_start_time")
+        if evaluation_start is not None and not isinstance(evaluation_start, datetime):
+            raise TypeError("evaluation_start_time must be a datetime")
+        evaluation_start_seconds = (
+            max(0.0, (evaluation_start - origin).total_seconds())
+            if evaluation_start is not None else 0.0
+        )
         state = {"latencies": [], "migrations": [], "timeline": [], "hot": 0,
-                 "storage_cost": 0.0, "last_seconds": 0.0}
+                 "storage_cost": 0.0, "migration_cost": 0.0,
+                 "last_seconds": 0.0}
         interval_seconds = float(self.config.get("decision_interval_hours", 1.0)) * 3600
-        next_decision = interval_seconds
+        next_decision = max(interval_seconds, evaluation_start_seconds)
 
         def snapshot(seconds):
             nonlocal next_decision
-            duration_hours = max(0.0, (seconds - state["last_seconds"]) / 3600.0)
+            cost_start = max(state["last_seconds"], evaluation_start_seconds)
+            duration_hours = max(0.0, (seconds - cost_start) / 3600.0)
             occupancy = defaultdict(float)
             for file_id, tier in tiers.items():
                 occupancy[tier] += files_by_id[file_id].size_bytes / (1024 ** 3)
@@ -51,16 +61,22 @@ class SimPySimulator:
                 cfg = self._tier_config(tier)
                 state["storage_cost"] += amount * float(cfg.get("cost_per_gb_month", 0.0)) * duration_hours / 730.0
             total = sum(occupancy.values())
-            state["timeline"].append({tier.value: amount / total if total else 0.0
-                                       for tier, amount in occupancy.items()})
+            if seconds >= evaluation_start_seconds:
+                state["timeline"].append({
+                    getattr(tier, "value", tier): amount / total if total else 0.0
+                    for tier, amount in occupancy.items()
+                })
             state["last_seconds"] = seconds
+            decision_time = origin + timedelta(seconds=seconds)
+            if decision_time < (evaluation_start or origin):
+                next_decision += interval_seconds
+                return
             if classifier is None or self.migration_controller is None:
                 next_decision += interval_seconds
                 return
             for file_id, file in files_by_id.items():
                 if not history[file_id] or self.feature_provider is None:
                     continue
-                decision_time = origin + timedelta(seconds=seconds)
                 features = np.asarray(self.feature_provider(file, history[file_id], decision_time), dtype=np.float32)
                 probabilities = classifier.predict_proba(features.reshape(1, -1))[0]
                 predicted_index = int(np.argmax(probabilities))
@@ -74,7 +90,7 @@ class SimPySimulator:
                     state["migrations"].append(decision)
                     cost = self.migration_controller.get_migration_cost(
                         file.size_bytes, source, decision.recommended_tier)
-                    state["storage_cost"] += cost.total_cost
+                    state["migration_cost"] += cost.total_cost
             next_decision += interval_seconds
 
         def process():
@@ -88,11 +104,12 @@ class SimPySimulator:
                 if file is None:
                     continue
                 tier = tiers[event.file_id]
-                cfg = self._tier_config(tier)
-                throughput = max(float(cfg.get("throughput_mbps", 1.0)), 1e-9)
-                transfer_ms = (event.size_bytes or file.size_bytes) * 8 / (throughput * 1_000_000) * 1000
-                state["latencies"].append(float(cfg.get("latency_ms", 0.0)) + transfer_ms)
-                state["hot"] += tier == Tier.HOT
+                if seconds >= evaluation_start_seconds:
+                    cfg = self._tier_config(tier)
+                    throughput = max(float(cfg.get("throughput_mbps", 1.0)), 1e-9)
+                    transfer_ms = (event.size_bytes or file.size_bytes) * 8 / (throughput * 1_000_000) * 1000
+                    state["latencies"].append(float(cfg.get("latency_ms", 0.0)) + transfer_ms)
+                    state["hot"] += tier == Tier.HOT
                 history[event.file_id].append(event)
             snapshot((events[-1].timestamp - origin).total_seconds())
 
@@ -104,6 +121,7 @@ class SimPySimulator:
             avg_access_latency_ms=float(np.mean(latencies)) if latencies else 0.0,
             p95_access_latency_ms=float(np.percentile(latencies, 95)) if latencies else 0.0,
             total_storage_cost=float(state["storage_cost"]),
+            total_migration_cost=float(state["migration_cost"]),
             cache_hit_rate=float(state["hot"] / len(latencies)) if latencies else 0.0,
         )
         return SimulationResult(metrics=metrics, migrations=state["migrations"],
@@ -111,7 +129,8 @@ class SimPySimulator:
                                 execution_time_seconds=time.perf_counter() - started)
 
     def _tier_config(self, tier):
-        config = self.tiers.get(tier, self.tiers.get(tier.value, {}))
+        tier_value = getattr(tier, "value", tier)
+        config = self.tiers.get(tier, self.tiers.get(tier_value, {}))
         if isinstance(config, TierConfig):
             return config.model_dump()
         return config or {}

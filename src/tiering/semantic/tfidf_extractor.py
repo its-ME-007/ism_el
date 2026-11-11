@@ -22,6 +22,10 @@ class TFIDFExtractor:
         self.max_features = int(options.get("max_features", 1000))
         self.ngram_range = tuple(options.get("ngram_range", (1, 2)))
         self.remove_stopwords = options.get("remove_stopwords", True)
+        # Product semantic ablations should represent document meaning only.
+        # Metadata is modeled in its own feature group and must not leak into
+        # the semantic-only run through this text representation.
+        self.include_metadata = bool(options.get("include_metadata", False))
         self.cache_path = options.get("cache_path")
         self.vectorizer = TfidfVectorizer(
             max_features=self.max_features,
@@ -39,18 +43,21 @@ class TFIDFExtractor:
             tokens = [_STEMMER.stem(token) for token in tokens]
         return " ".join(tokens)
 
-    @staticmethod
-    def _texts(documents: Sequence) -> List[str]:
+    def _texts(self, documents: Sequence) -> List[str]:
         texts = []
         for doc in documents:
             if isinstance(doc, str):
                 texts.append(doc)
             else:
                 content = getattr(doc, "content", "") or ""
-                filename = getattr(doc, "filename", "") or ""
-                category = getattr(doc, "category", "") or ""
-                metadata = getattr(doc, "metadata", {}) or {}
-                texts.append(" ".join([str(filename), str(category), str(content), str(metadata)]))
+                if self.include_metadata:
+                    filename = getattr(doc, "filename", "") or ""
+                    category = getattr(doc, "category", "") or ""
+                    metadata = getattr(doc, "metadata", {}) or {}
+                    content = " ".join(
+                        [str(filename), str(category), str(content), str(metadata)]
+                    )
+                texts.append(str(content))
         return texts
 
     def fit(self, documents: Sequence):
