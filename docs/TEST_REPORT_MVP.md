@@ -1,1 +1,78 @@
-# Current Project Test Report\n\n**Run date:** 2026-11-11\n**Python:** 3.13.6\n**Pytest:** 9.1.1\n\n## Project status covered by this report\n\nThe project currently has a runnable synthetic predictive-tiering workflow:\n\n- A: metadata and past workload.\n- B: TF-IDF semantic features only.\n- C: metadata, past workload, and TF-IDF.\n- D: C plus permission-filtered related-document features based on past accesses.\n- A/B/C/D model evaluation and a SimPy migration comparison on the same synthetic workload.\n- A single-document command that serves the combined C model.\n\nThis is the current prototype status, not a claim that the full enterprise architecture has been validated.\n\n## Automated tests\n\nThe five new tests in `tests/test_mvp_architecture.py` cover self-exclusion and ACL filtering, cutoff-safe documents, past-only neighbor access counts, private-by-default documents with no ACL groups, and rejection of future document versions and future events.\n\nFull suite command from the project root in PowerShell:\n\n```powershell\n$env:TEMP = Join-Path (Get-Location) '.pytest-temp'\n$env:TMP = $env:TEMP\nNew-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null\n$base = Join-Path $env:TEMP 'system-test'\npython -m pytest -q --basetemp $base --tb=short\n```\n\n**Result: 282 passed in 14.38 seconds.** No failures or errors. Pytest temporary files need to live under the workspace in this managed Windows environment; the default sandbox temp directory has caused permission failures in prior runs.\n\nCaptured output: `results/metrics/pytest_full_system.txt`.\n\n## Full workflow run\n\nCommand:\n\n```powershell\npython -m src.tiering.experiments.product_ablation\n```\n\nThe complete synthetic workflow finished successfully. It trained and evaluated A/B/C/D, created the cutoff-example dataset, and ran all four prediction paths plus the all-cold baseline through SimPy. Main outputs:\n\n- Metrics and manifest: `results/metrics/product_ablation_synthetic.json`\n- Model bundle: `results/models/product_ablation_synthetic.joblib`\n- 504 cutoff examples: `results/datasets/product_cutoff_examples.jsonl`\n- Captured command output: `results/metrics/product_ablation_full_system.txt`\n\nThe single-document C prediction also completed successfully with `examples/mvp_input.json`. It recommended **COLD**, estimated **3.95** accesses in the following 24 hours, and returned a **0.974** any-access probability. Captured output: `results/metrics/mvp_full_system.txt`.\n\n## SimPy snapshot\n\n| Run | Mean access latency (ms) | Migrations | Storage cost | Migration cost |\n|---|---:|---:|---:|---:|\n| All-cold baseline | 3137.45 | 0 | 0.000062 | 0 |\n| A: metadata/workload | 936.39 | 78 | 0.000400 | 235377.9984 |\n| B: semantic only | 996.18 | 73 | 0.000403 | 238532.7568 |\n| C: combined | 936.39 | 78 | 0.000400 | 235377.9984 |\n| D: combined/retrieval | 936.39 | 78 | 0.000400 | 235377.9984 |\n\nCosts use the simulator's configured values and units. They are not measured cloud prices. These results are synthetic pipeline checks, not estimates of production savings.\n\n## Findings\n\n- **D is integrated in training and SimPy evaluation, but did not retrieve any neighbors.** The synthetic documents have no explicit `metadata.access_groups`; private-by-default filtering therefore yields `retrieval_examples_with_neighbors: 0`. D matching C is expected with an empty retrieval context and says nothing about retrieval's value when authorized neighbors exist.\n- **A and C also produce the same simulation snapshot.** Synthetic access patterns are assigned independently from document content, so semantics has no designed demand signal in this data.\n- **The single-document predictor currently serves C, not D.** D needs a permission-filtered document catalog and corresponding past event history at inference time.\n- **No enterprise data is included.** Real document versions, actual ACLs, access logs, calibrated demand thresholds, and measured tier prices are still needed for external validity.\n\n## Bottom-line status\n\nThe executable synthetic prototype and its core cutoff/permission tests pass. Retrieval integration has not been meaningfully evaluated because the current generated corpus has no ACL groups. The next work is to add real or purpose-built versioned document/event/ACL input, exercise D with eligible neighbors, expose D prediction through the MVP, then evaluate on a real trace before making product performance claims.\n
+# Current Project Test Report
+
+**Run date:** 2026-11-11
+**Python:** 3.13.6
+**Pytest:** 9.1.1
+
+## Project status covered by this report
+
+The project currently has a runnable synthetic predictive-tiering workflow:
+
+- A: metadata and past workload.
+- B: TF-IDF semantic features only.
+- C: metadata, past workload, and TF-IDF.
+- D: C plus permission-filtered related-document features based on past accesses; now also available from the prediction command with a corpus snapshot.
+- A/B/C/D model evaluation and a SimPy migration comparison on the same synthetic workload.
+- A single-document command that serves the combined C model.
+
+This is the current prototype status, not a claim that the full enterprise architecture has been validated.
+
+## Automated tests
+
+The tests in `tests/test_mvp_architecture.py` cover self-exclusion and ACL filtering, cutoff-safe documents, past-only neighbor access counts, private-by-default documents with no ACL groups, rejection of future document versions/events, D inference with an authorized corpus neighbor, and duplicate/query-document corpus validation.
+
+Full suite command from the project root in PowerShell:
+
+```powershell
+$env:TEMP = Join-Path (Get-Location) '.pytest-temp'
+$env:TMP = $env:TEMP
+New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
+$base = Join-Path $env:TEMP 'system-test'
+python -m pytest -q --basetemp $base --tb=short
+```
+
+**Earlier baseline: 282 passed in 14.38 seconds. Current result after D serving and corpus-validation changes: 284 passed in 17.55 seconds.** No failures or errors. Pytest temporary files need to live under the workspace in this managed Windows environment; the default sandbox temp directory has caused permission failures in prior runs.
+
+Captured output: `results/metrics/pytest_full_system.txt`.
+
+## Full workflow run
+
+Command:
+
+```powershell
+python -m src.tiering.experiments.product_ablation
+```
+
+The complete synthetic workflow finished successfully. It trained and evaluated A/B/C/D, created the cutoff-example dataset, and ran all four prediction paths plus the all-cold baseline through SimPy. Main outputs:
+
+- Metrics and manifest: `results/metrics/product_ablation_synthetic.json`
+- Model bundle: `results/models/product_ablation_synthetic.joblib`
+- 504 cutoff examples: `results/datasets/product_cutoff_examples.jsonl`
+- Captured command output: `results/metrics/product_ablation_full_system.txt`
+
+The single-document C prediction also completed successfully with `examples/mvp_input.json`. It recommended **COLD**, estimated **3.95** accesses in the following 24 hours, and returned a **0.974** any-access probability. Captured output: `results/metrics/mvp_full_system.txt`.
+
+D serving also ran with `examples/mvp_input_d.json` and `--run D_combined_retrieval`. It returned one shared-group neighbor (cosine similarity 0.421) and one past access in that neighbor's 24-hour history. This verifies D inference with a controlled fixture; external ACL and catalog integrations remain untested.
+
+## SimPy snapshot
+
+| Run | Mean access latency (ms) | Migrations | Storage cost | Migration cost |
+|---|---:|---:|---:|---:|
+| All-cold baseline | 3137.45 | 0 | 0.000062 | 0 |
+| A: metadata/workload | 936.39 | 78 | 0.000400 | 235377.9984 |
+| B: semantic only | 996.18 | 73 | 0.000403 | 238532.7568 |
+| C: combined | 936.39 | 78 | 0.000400 | 235377.9984 |
+| D: combined/retrieval | 936.39 | 78 | 0.000400 | 235377.9984 |
+
+Costs use the simulator's configured values and units. They are not measured cloud prices. These results are synthetic pipeline checks, not estimates of production savings.
+
+## Findings
+
+- **D is integrated in training and SimPy evaluation, but did not retrieve any neighbors.** The synthetic documents have no explicit `metadata.access_groups`; private-by-default filtering therefore yields `retrieval_examples_with_neighbors: 0`. D matching C is expected with an empty retrieval context and says nothing about retrieval's value when authorized neighbors exist.
+- **A and C also produce the same simulation snapshot.** Synthetic access patterns are assigned independently from document content, so semantics has no designed demand signal in this data.
+- **D inference accepts a corpus snapshot supplied in the request.** It is not connected to an external catalog or ACL service; callers are responsible for providing the authorized snapshot.
+- **No enterprise data is included.** Real document versions, actual ACLs, access logs, calibrated demand thresholds, and measured tier prices are still needed for external validity.
+
+## Bottom-line status
+
+The executable synthetic prototype and its cutoff/permission tests pass. D inference works with a fixture containing an eligible neighbor. The default generated experiment still has zero ACL-eligible neighbors, so D's benchmark metrics do not measure retrieval benefit. Next add real or purpose-built versioned document/event/ACL data, evaluate D with meaningful authorized neighbors, and validate the system on a real trace before making product performance claims.

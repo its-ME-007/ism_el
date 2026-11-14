@@ -52,7 +52,13 @@ python -m src.tiering.prediction.mvp examples/mvp_input.json
 
 The input shape is illustrated in `examples/mvp_input.json`. Supply ISO 8601 timestamps with a timezone. The `access_events` list must not contain events after `cutoff`; the current text must not have `modified_at` after that cutoff. The predictor returns a tier, per-tier probabilities, expected next-day access count, and probability of any next-day access.
 
-The predictor does not yet serve D. D requires a permission-filtered corpus and neighbor event histories, rather than only the target document.
+Serve retrieval run D by passing a corpus snapshot in the input JSON and selecting the saved D model:
+
+```powershell
+python -m src.tiering.prediction.mvp examples/mvp_input_d.json --run D_combined_retrieval
+```
+
+Each corpus record needs a unique `document_id`, cutoff-safe `created_at` and `modified_at`, text, optional `metadata.access_groups`, and optional past `access_events`. The query document must not also appear in `corpus`. Retrieval returns aggregate counts and similarity only; it does not return neighbor text. The example returns one authorized neighbor. Missing or nonmatching access groups yield no neighbor.
 
 ## Run tests
 
@@ -66,14 +72,14 @@ $base = Join-Path $env:TEMP 'system-test'
 python -m pytest -q --basetemp $base --tb=short
 ```
 
-Latest result: **282 passed**. The full result and interpretation are in `docs/TEST_REPORT_MVP.md`; raw output is `results/metrics/pytest_full_system.txt`.
+Latest result: **284 passed**. The full result and interpretation are in `docs/TEST_REPORT_MVP.md`; raw output is `results/metrics/pytest_full_system.txt`.
 
 ## Architecture map
 
 - `src/tiering/ingestion/`: schemas, data generation, cleaning, and validation.
 - `src/tiering/workload/`: past access feature extraction.
 - `src/tiering/semantic/`: TF-IDF, embeddings, vector search, and cutoff/ACL-filtered retrieval features.
-- `src/tiering/models/` and `src/tiering/prediction/`: model training, tier classifier, and C prediction entry point.
+- `src/tiering/models/` and `src/tiering/prediction/`: model training, tier classifier, and C/D prediction entry points.
 - `src/tiering/experiments/`: A/B/C/D experiments and metrics.
 - `src/tiering/migration/`, `src/tiering/baselines/`, `src/tiering/simulation/`: migration decisions, comparison policies, and SimPy evaluation.
 - `data/`: downloaded and processed data.
@@ -122,7 +128,7 @@ After data and evaluation are credible, expose prediction through a small servic
 
 - Training and simulation data are synthetic; semantic benefit is unproven.
 - Synthetic documents have no ACL groups, so D currently has zero eligible neighbors.
-- D trains and runs through simulation, but the single-document MVP serves C only.
+- D trains, runs through simulation, and can be served from an input corpus snapshot; external ACL and catalog integrations remain future work.
 - The predictor accepts one supplied text version and rejects a modification after cutoff; it does not fetch historical versions itself.
 - There is no enterprise event-log adapter, production service/UI, cost calibration, or deployment workflow.
 

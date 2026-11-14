@@ -34,8 +34,15 @@ def _parse_datetime(value: str) -> datetime:
     return result.astimezone(timezone.utc)
 
 
-def predict_document(payload: dict, model_path: Path) -> dict:
-    """Return demand and tier predictions from a document record and access history."""
+def predict_document(payload: dict, model_path: Path,
+                     run_name: str = "C_combined") -> dict:
+    """Predict demand for one document using C or corpus-backed D."""
+    if run_name not in {"C_combined", "D_combined_retrieval"}:
+        raise ValueError(f"Unsupported product run: {run_name}")
+    if run_name == "D_combined_retrieval" and "corpus" not in payload:
+        raise ValueError("D requires a corpus snapshot in the input JSON")
+    if run_name == "D_combined_retrieval" and not isinstance(payload["corpus"], list):
+        raise ValueError("corpus must be a JSON array of document snapshots")
     cutoff = _parse_datetime(payload["cutoff"])
     created_at = _parse_datetime(payload["created_at"])
     modified_at = _parse_datetime(payload.get("modified_at", payload["created_at"]))
@@ -46,6 +53,15 @@ def predict_document(payload: dict, model_path: Path) -> dict:
             "modified_at is after cutoff; provide a versioned text snapshot available at cutoff"
         )
     document_id = str(payload.get("document_id", "unidentified"))
+    if run_name == "D_combined_retrieval":
+        corpus_ids = [str(document.get("document_id", ""))
+                      for document in payload["corpus"]]
+        if any(not candidate_id for candidate_id in corpus_ids):
+            raise ValueError("Every corpus document must have a document_id")
+        if len(corpus_ids) != len(set(corpus_ids)):
+            raise ValueError("corpus contains duplicate document_id values")
+        if document_id in corpus_ids:
+            raise ValueError("corpus must not include the query document")
     content = str(payload.get("text", "") or "")
     metadata = dict(payload.get("metadata", {}))
     file_record = SimpleNamespace(
@@ -69,7 +85,7 @@ def predict_document(payload: dict, model_path: Path) -> dict:
         raise ValueError("access_events contains data after cutoff")
 
     bundle = joblib.load(model_path)
-    combined = bundle["runs"]["C_combined"]
+    combined = bundle["runs"][run_name]
     tier_model: TierClassifier = combined["tier_model"]
     tfidf: TFIDFExtractor = bundle["tfidf"]
 
@@ -113,6 +129,42 @@ def predict_document(payload: dict, model_path: Path) -> dict:
     semantic = tfidf.transform([content])[0].astype(float).tolist()
     for index, value in enumerate(semantic):
         features[f"semantic_tfidf_{index}"] = value
+    retrieval = {"neighbor_count": 0.0, "top_similarity": 0.0,
+                 "mean_similarity": 0.0, "neighbor_mean_accesses_24h": 0.0,
+                 "neighbor_mean_accesses_7d": 0.0}
+    if run_name == "D_combined_retrieval":
+        corpus_docs = [file_record]
+        corpus_vectors = {document_id: np.asarray(semantic, dtype=np.float32)}
+        corpus_events = {document_id: events}
+        for record in payload["corpus"]:
+            candidate_id = str(record["document_id"])
+            candidate_created = _parse_datetime(record["created_at"])
+            candidate_modified = _parse_datetime(record.get("modified_at", record["created_at"]))
+            candidate_metadata = dict(record.get("metadata", {}))
+            candidate_text = str(record.get("text", "") or "")
+            candidate = SimpleNamespace(
+                file_id=candidate_id,
+                filename=str(record.get("filename", "")),
+                category=str(record.get("category", "unknown")),
+                content=candidate_text,
+                metadata=candidate_metadata,
+                size_bytes=int(record.get("size_bytes", 0)),
+                created_at=candidate_created,
+                modified_at=candidate_modified,
+            )
+            corpus_docs.append(candidate)
+            corpus_vectors[candidate_id] = tfidf.transform([candidate_text])[0]
+            corpus_events[candidate_id] = [AccessEvent(
+                timestamp=_parse_datetime(event["timestamp"]),
+                file_id=candidate_id,
+                operation=event.get("operation", "read"),
+                size_bytes=event.get("size_bytes"),
+            ) for event in record.get("access_events", [])]
+        retrieval = retrieval_context_features(
+            file_record, corpus_docs, corpus_vectors, corpus_events, cutoff, top_k=5
+        )
+        features.update({f"retrieval_{key}": float(value)
+                         for key, value in retrieval.items()})
     feature_names = combined["feature_names"]
     row = np.asarray([[features.get(name, 0.0) for name in feature_names]], dtype=np.float32)
     tier_probabilities = tier_model.predict_proba(row)[0]
@@ -122,7 +174,7 @@ def predict_document(payload: dict, model_path: Path) -> dict:
     return {
         "document_id": document_id,
         "cutoff": cutoff.isoformat(),
-        "model": "C_combined_synthetic_tfidf",
+        "model": run_name,
         "predicted_tier": TIER_NAMES[tier_index],
         "tier_probabilities": {
             TIER_NAMES[index]: float(probability)
@@ -130,7 +182,10 @@ def predict_document(payload: dict, model_path: Path) -> dict:
         },
         "estimated_accesses_next_24h": demand_count,
         "probability_any_access_next_24h": access_probability,
-        "feature_groups": ["metadata_workload", "tfidf_semantics"],
+        "feature_groups": (["metadata_workload", "tfidf_semantics"]
+                           if run_name == "C_combined" else
+                           ["metadata_workload", "tfidf_semantics", "retrieval_context"]),
+        "retrieval": retrieval if run_name == "D_combined_retrieval" else None,
         "limitations": [
             "Model was trained on synthetic traces; this output is a prototype recommendation.",
             "Synthetic access patterns were assigned independently of document meaning.",
@@ -143,9 +198,11 @@ def main(argv=None) -> None:
     parser.add_argument("input", type=Path, help="JSON input record")
     parser.add_argument("--model", type=Path,
                         default=Path("results/models/product_ablation_synthetic.joblib"))
+    parser.add_argument("--run", choices=["C_combined", "D_combined_retrieval"],
+                        default="C_combined")
     args = parser.parse_args(argv)
     payload = json.loads(args.input.read_text(encoding="utf-8"))
-    result = predict_document(payload, args.model)
+    result = predict_document(payload, args.model, args.run)
     print(json.dumps(result, indent=2))
 
 
