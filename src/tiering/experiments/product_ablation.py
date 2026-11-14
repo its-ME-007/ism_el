@@ -65,6 +65,8 @@ def _make_samples(files, events_by_file, days, file_ids, start, extractor):
         for file in files:
             if file.file_id not in file_ids:
                 continue
+            if file.created_at > cutoff:
+                continue  # document did not exist at this cutoff
             future_count = _future_count(events_by_file[file.file_id], cutoff)
             feature_values = _feature_dict(
                 file, events_by_file[file.file_id], cutoff, extractor
@@ -205,30 +207,52 @@ def run_product_ablation(
     output_models: Path = Path("results/models"),
     output_metrics: Path = Path("results/metrics"),
     file_count: int = FILE_COUNT,
+    data_bundle=None,
 ) -> dict[str, Any]:
-    """Fit matched metadata/workload, semantic-only, and combined runs."""
+    """Fit matched metadata/workload, semantic-only, and combined runs.
+
+    ``data_bundle`` (an EnronBundle or any object exposing ``files``, ``traces``,
+    ``start``, ``train_days``, ``validation_day``, ``test_day`` and ``stats``)
+    swaps the synthetic generator for a real corpus. When ``None`` the synthetic
+    pipeline runs exactly as before and stays a useful null baseline.
+    """
     output_models.mkdir(parents=True, exist_ok=True)
     output_metrics.mkdir(parents=True, exist_ok=True)
 
-    files = DatasetGenerator(seed=SEED).generate(file_count)
-    start = datetime(2025, 1, 1)
-    workload_config = {
-        "hot_ratio": 0.25, "warm_ratio": 0.30, "cold_ratio": 0.35,
-        "seasonal_ratio": 0.10, "hot_frequency": 5.0,
-        "warm_frequency": 1.0, "cold_frequency": 0.05,
-        "seasonal_period_hours": 24.0, "seasonal_amplitude": 3.0,
-        "read_write_ratio": 0.8,
-    }
-    traces = WorkloadGenerator(workload_config, SEED).generate_traces(
-        files, DURATION_HOURS, start
-    )
+    if data_bundle is None:
+        files = DatasetGenerator(seed=SEED).generate(file_count)
+        start = datetime(2025, 1, 1)
+        workload_config = {
+            "hot_ratio": 0.25, "warm_ratio": 0.30, "cold_ratio": 0.35,
+            "seasonal_ratio": 0.10, "hot_frequency": 5.0,
+            "warm_frequency": 1.0, "cold_frequency": 0.05,
+            "seasonal_period_hours": 24.0, "seasonal_amplitude": 3.0,
+            "read_write_ratio": 0.8,
+        }
+        traces = WorkloadGenerator(workload_config, SEED).generate_traces(
+            files, DURATION_HOURS, start
+        )
+        train_days, validation_day, test_day = TRAIN_DAYS, VALIDATION_DAY, TEST_DAY
+        suffix = "synthetic"
+        dataset_label = "synthetic enterprise files + generated 30-day workload"
+    else:
+        files = list(data_bundle.files)
+        traces = list(data_bundle.traces)
+        start = data_bundle.start
+        train_days = list(data_bundle.train_days)
+        validation_day = data_bundle.validation_day
+        test_day = data_bundle.test_day
+        suffix = "enron"
+        dataset_label = "Enron email corpus (real text + participant access groups)"
+
     events_by_file = defaultdict(list)
     for event in traces:
         events_by_file[event.file_id].append(event)
 
     categories = [_value(file.category) for file in files]
+    stratify = categories if len(set(categories)) > 1 else None
     train_files, heldout_files = train_test_split(
-        files, test_size=0.20, random_state=SEED, stratify=categories
+        files, test_size=0.20, random_state=SEED, stratify=stratify
     )
     train_ids = {file.file_id for file in train_files}
     heldout_ids = {file.file_id for file in heldout_files}
@@ -236,19 +260,19 @@ def run_product_ablation(
 
     workload_extractor = WorkloadFeatureExtractor(normalize=False)
     train_samples = _make_samples(
-        files, events_by_file, TRAIN_DAYS, train_ids, start, workload_extractor
+        files, events_by_file, train_days, train_ids, start, workload_extractor
     )
     validation_samples = _make_samples(
-        files, events_by_file, (VALIDATION_DAY,), train_ids, start, workload_extractor
+        files, events_by_file, (validation_day,), train_ids, start, workload_extractor
     )
     known_test = _make_samples(
-        files, events_by_file, (TEST_DAY,), train_ids, start, workload_extractor
+        files, events_by_file, (test_day,), train_ids, start, workload_extractor
     )
     unseen_test = _make_samples(
-        files, events_by_file, (TEST_DAY,), heldout_ids, start, workload_extractor
+        files, events_by_file, (test_day,), heldout_ids, start, workload_extractor
     )
     all_test = _make_samples(
-        files, events_by_file, (TEST_DAY,), all_ids, start, workload_extractor
+        files, events_by_file, (test_day,), all_ids, start, workload_extractor
     )
     test_groups = {
         "future_period_known_files": known_test,
@@ -256,10 +280,38 @@ def run_product_ablation(
         "future_period_all_files": all_test,
     }
 
+    # Tier labels are operational buckets, not ground truth. The synthetic
+    # 50/5-accesses-per-day cutoffs assume a hot-frequency generator that real
+    # email re-engagement never reaches, so derive data-relative thresholds from
+    # the training future-count distribution to keep all three tiers populated.
+    if data_bundle is None:
+        tier_label_rules = TIER_CUTOFFS
+    else:
+        train_counts = sorted(sample["future_count"] for sample in train_samples)
+        warm_threshold = max(1, int(np.percentile(train_counts, 70)))
+        hot_threshold = max(warm_threshold + 1, int(np.percentile(train_counts, 90)))
+
+        def _relative_tier(count: int) -> int:
+            if count >= hot_threshold:
+                return 0
+            if count >= warm_threshold:
+                return 1
+            return 2
+
+        for samples in (train_samples, validation_samples, known_test,
+                        unseen_test, all_test):
+            for sample in samples:
+                sample["tier"] = _relative_tier(sample["future_count"])
+        tier_label_rules = {
+            "HOT": f">={hot_threshold} future accesses/24h",
+            "WARM": f"{warm_threshold}-{hot_threshold - 1} future accesses/24h",
+            "COLD": f"0-{warm_threshold - 1} future accesses/24h",
+        }
+
     metadata_feature_names = sorted({
         name for sample in train_samples for name in sample["features"]
     })
-    earliest_training_cutoff = start + timedelta(days=min(TRAIN_DAYS))
+    earliest_training_cutoff = start + timedelta(days=min(train_days))
     train_documents = [
         file for file in train_files
         if (file.content or "").strip()
@@ -291,7 +343,9 @@ def run_product_ablation(
 
     # Persist the exact cutoff-time rows used by the matched A/B/C experiment.
     # Identifiers and future labels stay outside the feature groups.
-    example_path = Path("results/datasets/product_cutoff_examples.jsonl")
+    example_name = ("product_cutoff_examples.jsonl" if data_bundle is None
+                    else "enron_cutoff_examples.jsonl")
+    example_path = Path("results/datasets") / example_name
     example_path.parent.mkdir(parents=True, exist_ok=True)
     file_by_id = {file.file_id: file for file in files}
     split_samples = (
@@ -460,16 +514,16 @@ def run_product_ablation(
             "migration_count": len(simulation.migrations),
         }
 
-    model_path = output_models / "product_ablation_synthetic.joblib"
+    model_path = output_models / f"product_ablation_{suffix}.joblib"
     joblib.dump({
-        "dataset": "synthetic enterprise files + generated 30-day workload",
+        "dataset": dataset_label,
         "seed": SEED,
         "train_file_ids": sorted(train_ids),
         "heldout_file_ids": sorted(heldout_ids),
         "tfidf": tfidf,
         "runs": artifacts,
         "prediction_window_hours": PREDICTION_WINDOW_HOURS,
-        "tier_label_rules": TIER_CUTOFFS,
+        "tier_label_rules": tier_label_rules,
         "retrieval": {
             "top_k": 5,
             "permission_rule": "shared explicit metadata.access_groups; missing groups means no neighbors",
@@ -479,20 +533,21 @@ def run_product_ablation(
     }, model_path)
 
     report = {
-        "dataset": "synthetic enterprise files + generated 30-day workload",
+        "dataset": dataset_label,
         "seed": SEED,
         "files": len(files),
         "access_events": len(traces),
         "prediction_window_hours": PREDICTION_WINDOW_HOURS,
-        "training_reference_days": list(TRAIN_DAYS),
-        "validation_reference_day": VALIDATION_DAY,
-        "test_reference_day": TEST_DAY,
+        "training_reference_days": list(train_days),
+        "validation_reference_day": validation_day,
+        "test_reference_day": test_day,
         "file_split": {
             "training_file_count": len(train_ids),
             "heldout_file_count": len(heldout_ids),
-            "method": "stratified by generated category; fixed seed",
+            "method": ("stratified by generated category; fixed seed"
+                       if data_bundle is None else "random holdout; fixed seed"),
         },
-        "tier_label_rules": TIER_CUTOFFS,
+        "tier_label_rules": tier_label_rules,
         "runs": runs,
         "simpy_evaluation": {
             "evaluation_start": evaluation_start.isoformat(),
@@ -508,6 +563,13 @@ def run_product_ablation(
             "independently of document content, so semantics is not designed to predict "
             "future demand. The unseen-file score uses IDs excluded from model fitting; "
             "the known-file score evaluates a later period for training identities."
+            if data_bundle is None else
+            "Real Enron corpus: content and access_groups are genuine and "
+            "content-correlated (participants share topics). Access events are a "
+            "participant re-engagement PROXY for file access, optionally densified for "
+            "sparse documents; the forecast target therefore measures a proxy for demand, "
+            "not native file accesses. Email is not a file store, so treat absolute "
+            "numbers as indicative. The unseen-file score uses IDs excluded from fitting."
         ),
         "semantic_representation": {
             "type": "TF-IDF",
@@ -554,13 +616,52 @@ def run_product_ablation(
             ),
         },
     }
-    report_path = output_metrics / "product_ablation_synthetic.json"
+    if data_bundle is not None:
+        report["data_source"] = getattr(data_bundle, "stats", {})
+    report_path = output_metrics / f"product_ablation_{suffix}.json"
     report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
 
 
+def run_enron_ablation(
+    jsonl: Path = Path("data/processed/enron_sample.jsonl"),
+    output_models: Path = Path("results/models"),
+    output_metrics: Path = Path("results/metrics"),
+    horizon_days: int = 14,
+    max_accesses_per_doc: int = 50,
+    densify: int = 0,
+) -> dict[str, Any]:
+    """Run A/B/C/D on the real Enron corpus parsed by fetch_enron."""
+    from src.tiering.ingestion.enron_adapter import load_enron_jsonl
+
+    bundle = load_enron_jsonl(
+        jsonl, horizon_days=horizon_days,
+        max_accesses_per_doc=max_accesses_per_doc, densify=densify,
+    )
+    return run_product_ablation(
+        output_models=output_models, output_metrics=output_metrics,
+        data_bundle=bundle,
+    )
+
+
 def main():
-    print(json.dumps(run_product_ablation(), indent=2))
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--enron", type=Path, default=None,
+                        help="Parsed Enron JSONL (from fetch_enron). Omit for synthetic.")
+    parser.add_argument("--horizon-days", type=int, default=14)
+    parser.add_argument("--max-accesses-per-doc", type=int, default=50)
+    parser.add_argument("--densify", type=int, default=0,
+                        help="Synthetic access floor for sparse docs; 0 = all real")
+    args = parser.parse_args()
+    if args.enron is None:
+        print(json.dumps(run_product_ablation(), indent=2))
+    else:
+        print(json.dumps(run_enron_ablation(
+            jsonl=args.enron, horizon_days=args.horizon_days,
+            max_accesses_per_doc=args.max_accesses_per_doc, densify=args.densify,
+        ), indent=2))
 
 
 if __name__ == "__main__":

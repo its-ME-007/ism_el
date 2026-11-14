@@ -60,6 +60,24 @@ python -m src.tiering.prediction.mvp examples/mvp_input_d.json --run D_combined_
 
 Each corpus record needs a unique `document_id`, cutoff-safe `created_at` and `modified_at`, text, optional `metadata.access_groups`, and optional past `access_events`. The query document must not also appear in `corpus`. Retrieval returns aggregate counts and similarity only; it does not return neighbor text. The example returns one authorized neighbor. Missing or nonmatching access groups yield no neighbor.
 
+## Run on real data (Enron)
+
+The A/B/C/D experiment also runs on the public Enron email corpus (FERC public domain), which supplies real document text, real timestamps, and real participant-based access groups — giving run D genuine, content-correlated authorized neighbors that synthetic data cannot. See `docs/DATASET_FEASIBILITY.md` for the mapping, the access-event proxy, and caveats.
+
+Parse a bounded sample into cutoff-usable JSONL (point `--source` at a downloaded `enron_mail_*.tar.gz`, an extracted `maildir/` directory, or omit it to download from CMU):
+
+```powershell
+python -m src.tiering.ingestion.fetch_enron --source data/raw/enron_mail.tar.gz --output data/processed/enron_sample.jsonl --max-emails 5000
+```
+
+Then run the matched A/B/C/D experiment on it:
+
+```powershell
+python -m src.tiering.experiments.product_ablation --enron data/processed/enron_sample.jsonl
+```
+
+Outputs are `results/models/product_ablation_enron.joblib`, `results/metrics/product_ablation_enron.json`, and `results/datasets/enron_cutoff_examples.jsonl`. Emails are one-shot, so access events are a **participant re-engagement proxy** (`--densify K` synthesizes extra events only for sparse documents; the default keeps every event real). The report's `data_source` block records real-vs-enriched event counts and the eligible-neighbor rate. Serve run D against the real model by passing `--model results/models/product_ablation_enron.joblib`.
+
 ## Run tests
 
 In this managed Windows workspace, pytest temp files need to be placed inside the writable project folder:
@@ -72,11 +90,11 @@ $base = Join-Path $env:TEMP 'system-test'
 python -m pytest -q --basetemp $base --tb=short
 ```
 
-Latest result: **284 passed**. The full result and interpretation are in `docs/TEST_REPORT_MVP.md`; raw output is `results/metrics/pytest_full_system.txt`.
+Latest result: **290 passed**. The full result and interpretation are in `docs/TEST_REPORT_MVP.md`; raw output is `results/metrics/pytest_full_system.txt`.
 
 ## Architecture map
 
-- `src/tiering/ingestion/`: schemas, data generation, cleaning, and validation.
+- `src/tiering/ingestion/`: schemas, data generation, cleaning, validation, and the Enron real-data fetcher/adapter (`fetch_enron.py`, `enron_adapter.py`).
 - `src/tiering/workload/`: past access feature extraction.
 - `src/tiering/semantic/`: TF-IDF, embeddings, vector search, and cutoff/ACL-filtered retrieval features.
 - `src/tiering/models/` and `src/tiering/prediction/`: model training, tier classifier, and C/D prediction entry points.
@@ -126,8 +144,9 @@ After data and evaluation are credible, expose prediction through a small servic
 
 ## Current gaps to keep visible
 
-- Training and simulation data are synthetic; semantic benefit is unproven.
-- Synthetic documents have no ACL groups, so D currently has zero eligible neighbors.
+- The synthetic run remains a pipeline/null baseline; on it semantic benefit is unproven because its access patterns are content-independent.
+- The real Enron run gives D genuine authorized neighbors (participant access groups), but its forecast target rests on a participant re-engagement **proxy** for file access, not native accesses; email is not a file store, so treat it as a research approximation, not an enterprise result.
+- Synthetic documents have no ACL groups, so on the synthetic run D still has zero eligible neighbors (the Enron run does not).
 - D trains, runs through simulation, and can be served from an input corpus snapshot; external ACL and catalog integrations remain future work.
 - The predictor accepts one supplied text version and rejects a modification after cutoff; it does not fetch historical versions itself.
 - There is no enterprise event-log adapter, production service/UI, cost calibration, or deployment workflow.
