@@ -34,6 +34,16 @@ def _parse_datetime(value: str) -> datetime:
     return result.astimezone(timezone.utc)
 
 
+def _limitations(dataset: str) -> list[str]:
+    if "synthetic" in dataset.lower():
+        return ["Model was trained on synthetic traces; this output is a prototype "
+                "recommendation.",
+                "Synthetic access patterns were assigned independently of document meaning."]
+    return ["Model was trained on a research corpus whose access events are a "
+            "re-engagement proxy, not native file-access logs.",
+            "Recommendation only: validate against your own access logs before acting."]
+
+
 def predict_document(payload: dict, model_path: Path,
                      run_name: str = "C_combined") -> dict:
     """Predict demand for one document using C or corpus-backed D."""
@@ -186,10 +196,8 @@ def predict_document(payload: dict, model_path: Path,
                            if run_name == "C_combined" else
                            ["metadata_workload", "tfidf_semantics", "retrieval_context"]),
         "retrieval": retrieval if run_name == "D_combined_retrieval" else None,
-        "limitations": [
-            "Model was trained on synthetic traces; this output is a prototype recommendation.",
-            "Synthetic access patterns were assigned independently of document meaning.",
-        ],
+        "model_dataset": bundle.get("dataset"),
+        "limitations": _limitations(bundle.get("dataset", "")),
     }
 
 

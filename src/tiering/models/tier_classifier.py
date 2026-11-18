@@ -52,7 +52,8 @@ class TierClassifier:
         X: np.ndarray,
         y: np.ndarray,
         feature_names: Optional[List[str]] = None,
-        eval_set: Optional[Tuple[np.ndarray, np.ndarray]] = None
+        eval_set: Optional[Tuple[np.ndarray, np.ndarray]] = None,
+        sample_weight: Optional[np.ndarray] = None,
     ) -> None:
         """
         Train XGBClassifier on training data.
@@ -62,6 +63,7 @@ class TierClassifier:
             y: Target labels (0=HOT, 1=WARM, 2=COLD)
             feature_names: Optional names for features (for interpretation)
             eval_set: Optional (X_val, y_val) for early stopping
+            sample_weight: Optional per-row weights (e.g. balanced class weights)
             
         **Validates: Requirements 9.1, 9.2**
         """
@@ -72,6 +74,8 @@ class TierClassifier:
         X_scaled = self.scaler.fit_transform(X)
         
         fit_kwargs = {"verbose": False}
+        if sample_weight is not None:
+            fit_kwargs["sample_weight"] = sample_weight
         if eval_set is not None:
             X_val, y_val = eval_set
             X_val_scaled = self.scaler.transform(X_val)

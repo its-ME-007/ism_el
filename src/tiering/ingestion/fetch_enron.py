@@ -85,7 +85,7 @@ def _record(raw_bytes: bytes, path: str) -> dict | None:
     if not participants:
         return None
     # Owning mailbox user = top maildir folder (e.g. "allen-p/inbox/3." -> allen-p).
-    owner = path.replace("\\", "/").split("maildir/")[-1].split("/")[0]
+    owner = _owner(path)
     return {
         "message_id": message.get("message-id", path).strip() or path,
         "path": path,
@@ -100,16 +100,26 @@ def _record(raw_bytes: bytes, path: str) -> dict | None:
     }
 
 
-def _iter_messages(source: Path):
-    """Yield (path, raw_bytes) for each email file under a tarball or directory."""
+def _owner(path: str) -> str:
+    return path.replace("\\", "/").split("maildir/")[-1].split("/")[0]
+
+
+def _iter_messages(source: Path, owners: set[str] | None = None):
+    """Yield (path, raw_bytes) for each email file under a tarball or directory.
+
+    ``owners`` keeps whole mailboxes (e.g. ``{"kaminski-v"}``) instead of the
+    first N files, which in a tarball are alphabetical by mailbox.
+    """
     if source.is_dir():
         for path in sorted(source.rglob("*")):
-            if path.is_file():
+            if path.is_file() and (not owners or _owner(str(path)) in owners):
                 yield str(path), path.read_bytes()
         return
     with tarfile.open(source, "r:*") as tar:
         for member in tar:
             if not member.isfile():
+                continue
+            if owners and _owner(member.name) not in owners:
                 continue
             handle = tar.extractfile(member)
             if handle is None:
@@ -132,13 +142,14 @@ def _ensure_local(source: str, cache: Path) -> Path:
 
 
 def fetch(source: str, output: Path, max_emails: int = 0,
-          cache: Path = Path("data/raw/enron_mail.tar.gz")) -> int:
+          cache: Path = Path("data/raw/enron_mail.tar.gz"),
+          owners: set[str] | None = None) -> int:
     """Write up to ``max_emails`` (0 = all) parsed records to ``output`` JSONL."""
     local = _ensure_local(source, cache)
     output.parent.mkdir(parents=True, exist_ok=True)
     written = 0
     with output.open("w", encoding="utf-8", newline="\n") as destination:
-        for path, raw in _iter_messages(local):
+        for path, raw in _iter_messages(local, owners):
             record = _record(raw, path)
             if record is None:
                 continue
@@ -163,8 +174,11 @@ def main() -> None:
                         help="Maximum emails to parse; 0 means all")
     parser.add_argument("--cache", type=Path, default=Path("data/raw/enron_mail.tar.gz"),
                         help="Where a downloaded URL tarball is cached")
+    parser.add_argument("--owners", default="",
+                        help="Comma-separated mailbox names to keep (e.g. kaminski-v,lay-k)")
     args = parser.parse_args()
-    fetch(args.source, args.output, args.max_emails, args.cache)
+    owners = {name.strip() for name in args.owners.split(",") if name.strip()} or None
+    fetch(args.source, args.output, args.max_emails, args.cache, owners)
 
 
 if __name__ == "__main__":

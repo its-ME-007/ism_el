@@ -13,21 +13,35 @@ Real signals (no fabrication):
     authorized neighbors -- the thing synthetic data could never provide.
 
 The one honest gap: emails are one-shot, so there is no native repeated
-file-access log. Access events are a **participant re-engagement proxy** -- a
-document is "accessed" at the timestamp of every later email that shares a
-participant with it, within a horizon. Optional ``densify`` synthesizes extra
-events only for documents below a floor, counted separately so the report can
-state the real-vs-enriched share. ``densify=0`` (default) keeps every access
-event real.
+file-access log. Access events are a **re-engagement proxy**:
+
+  * ``proxy="thread"`` (default): a document is "accessed" at every later email,
+    within a horizon, in the same conversation -- same normalized subject
+    (``Re:``/``Fw:`` prefixes stripped) and at least one shared participant.
+    Replying to or forwarding a message is the closest email analogue of
+    re-opening a file, and it is specific to that document.
+  * ``proxy="participant"`` (legacy): every later email sharing *any*
+    participant. Because the mailbox owner is on nearly every message, this
+    degenerates into "how busy is the owner", not per-document demand. Kept only
+    for comparison.
+
+Proxy accesses can only occur within ``horizon_days`` of a document's date, so
+an older document's future count is zero *by construction*. The bundle exposes
+``max_sample_age_days`` so the experiment scores only documents whose target is
+still undetermined. Optional ``densify`` synthesizes extra events only for
+documents below a floor, counted separately so the report can state the
+real-vs-enriched share. ``densify=0`` (default) keeps every access event real.
 """
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+import re
 from typing import Iterable
 
 import numpy as np
@@ -41,9 +55,30 @@ class EnronBundle:
     traces: list[AccessEvent]
     start: datetime
     train_days: list[int]
-    validation_day: int
-    test_day: int
+    validation_days: list[int]
+    test_days: list[int]
+    max_sample_age_days: int | None = None
     stats: dict = field(default_factory=dict)
+
+    @property
+    def validation_day(self) -> int:
+        return self.validation_days[0]
+
+    @property
+    def test_day(self) -> int:
+        return self.test_days[0]
+
+
+# The corpus contains a few mis-dated messages (1970s, 2020s+); the real
+# activity window is 1998-2002.
+DATE_MIN = datetime(1998, 1, 1, tzinfo=timezone.utc)
+DATE_MAX = datetime(2003, 1, 1, tzinfo=timezone.utc)
+_PREFIX = re.compile(r"^\s*((re|fw|fwd)\s*(\[\d+\])?\s*:\s*)+", re.IGNORECASE)
+
+
+def normalize_subject(subject: str) -> str:
+    """Conversation key: lowercase subject without reply/forward prefixes."""
+    return " ".join(_PREFIX.sub("", subject or "").lower().split())
 
 
 def _parse(value: str) -> datetime:
@@ -56,6 +91,7 @@ def _parse(value: str) -> datetime:
 def _documents(records: Iterable[dict]) -> list[FileDocument]:
     """One FileDocument per unique email, carrying participants as access_groups."""
     seen: set[str] = set()
+    seen_content: set[tuple] = set()
     files: list[FileDocument] = []
     for record in records:
         file_id = str(record.get("message_id") or record.get("path", "")).strip()
@@ -64,8 +100,18 @@ def _documents(records: Iterable[dict]) -> list[FileDocument]:
         body = str(record.get("body", "") or "")
         if not file_id or file_id in seen or not participants or not body.strip():
             continue
-        seen.add(file_id)
         when = _parse(record["date"])
+        if not DATE_MIN <= when < DATE_MAX:
+            continue
+        # The same message is stored in several folders/mailboxes under
+        # different Message-IDs; keep one copy so duplicates cannot straddle
+        # the train/held-out split.
+        content_key = (when.isoformat(), tuple(record.get("sender", [])),
+                       str(record.get("subject", "")), body.strip())
+        if file_id in seen or content_key in seen_content:
+            continue
+        seen.add(file_id)
+        seen_content.add(content_key)
         subject = str(record.get("subject", "") or "")
         content = f"{subject}\n{body}".strip()
         files.append(FileDocument(
@@ -85,6 +131,7 @@ def _documents(records: Iterable[dict]) -> list[FileDocument]:
                 "compressed": False,
                 "owner": str(record.get("owner", "unknown")),
                 "participant_count": len(participants),
+                "thread": normalize_subject(subject),
             },
         ))
     return files
@@ -92,14 +139,28 @@ def _documents(records: Iterable[dict]) -> list[FileDocument]:
 
 def _proxy_traces(files: list[FileDocument], horizon_days: int,
                   max_accesses_per_doc: int, densify: int,
-                  seed: int) -> tuple[list[AccessEvent], int, int]:
-    """Participant re-engagement access events (+ optional sparse densify)."""
-    activity: dict[str, list[datetime]] = defaultdict(list)
+                  seed: int, proxy: str = "thread") -> tuple[list[AccessEvent], int, int]:
+    """Re-engagement access events (+ optional sparse densify)."""
+    if proxy not in {"thread", "participant"}:
+        raise ValueError(f"Unknown proxy: {proxy}")
+    # Activity streams keyed by participant ("participant") or by
+    # (thread, participant) ("thread"); each later message in a stream that
+    # contains the document is one re-engagement of that document.
+    activity: dict[tuple, list[datetime]] = defaultdict(list)
+
+    def keys(file):
+        thread = file.metadata.get("thread", "")
+        if proxy == "thread":
+            if not thread:
+                return []
+            return [(thread, group) for group in file.metadata["access_groups"]]
+        return [(group,) for group in file.metadata["access_groups"]]
+
     for file in files:
-        for group in file.metadata["access_groups"]:
-            activity[group].append(file.created_at)
-    for group in activity:
-        activity[group].sort()
+        for key in keys(file):
+            activity[key].append(file.created_at)
+    for key in activity:
+        activity[key].sort()
 
     rng = np.random.default_rng(seed)
     traces: list[AccessEvent] = []
@@ -109,13 +170,9 @@ def _proxy_traces(files: list[FileDocument], horizon_days: int,
         t0 = file.created_at
         window_end = t0 + horizon
         times: set[datetime] = set()
-        for group in file.metadata["access_groups"]:
-            # ponytail: naive per-group scan, O(docs * activity). Fine for a
-            # bounded research sample; bisect by time window if scaled to the
-            # full 500k-email corpus.
-            for when in activity[group]:
-                if when <= t0:
-                    continue
+        for key in keys(file):
+            stream = activity[key]
+            for when in stream[bisect_right(stream, t0):]:
                 if when > window_end:
                     break
                 times.add(when)
@@ -135,22 +192,31 @@ def _proxy_traces(files: list[FileDocument], horizon_days: int,
     return traces, real, enriched
 
 
-def _split_days(files: list[FileDocument], start: datetime) -> tuple[list[int], int, int]:
-    """Chronological split as day offsets at percentiles of document dates."""
+def _split_days(files: list[FileDocument], start: datetime,
+                step_days: int = 7) -> tuple[list[int], list[int], list[int]]:
+    """Chronological weekly cutoffs at percentiles of document dates.
+
+    Train p10-p65, validation p70-p78, test p85-p97. Each block starts at least
+    a day after the previous block ends, so 24h label windows never overlap
+    across splits.
+    """
     doc_days = sorted(max(0, (file.created_at - start).days) for file in files)
     pct = lambda q: int(np.percentile(doc_days, q))
-    train = sorted({pct(20), pct(40), pct(60)})
-    validation = pct(75)
-    test = pct(85)
-    # Keep the splits strictly increasing even on tiny/degenerate samples.
-    validation = max(validation, train[-1] + 1)
-    test = max(test, validation + 1)
+
+    def block(lo, hi, after):
+        first = max(pct(lo), after + 1)
+        last = max(pct(hi), first)
+        return list(range(first, last + 1, step_days))
+
+    train = block(10, 65, -1)
+    validation = block(70, 78, train[-1])
+    test = block(85, 97, validation[-1])
     return train, validation, test
 
 
 def load_enron_bundle(records: Iterable[dict], *, horizon_days: int = 14,
                       max_accesses_per_doc: int = 50, densify: int = 0,
-                      seed: int = 7) -> EnronBundle:
+                      seed: int = 7, proxy: str = "thread") -> EnronBundle:
     """Build the (files, traces, start, split) bundle from parsed email records."""
     files = _documents(records)
     if not files:
@@ -158,8 +224,8 @@ def load_enron_bundle(records: Iterable[dict], *, horizon_days: int = 14,
     earliest = min(file.created_at for file in files)
     start = earliest.replace(hour=0, minute=0, second=0, microsecond=0)
     traces, real, enriched = _proxy_traces(
-        files, horizon_days, max_accesses_per_doc, densify, seed)
-    train_days, validation_day, test_day = _split_days(files, start)
+        files, horizon_days, max_accesses_per_doc, densify, seed, proxy)
+    train_days, validation_days, test_days = _split_days(files, start)
     stats = {
         "documents": len(files),
         "access_events_total": len(traces),
@@ -170,11 +236,14 @@ def load_enron_bundle(records: Iterable[dict], *, horizon_days: int = 14,
                                        for group in file.metadata["access_groups"]}),
         "span_days": max((file.created_at for file in files)).toordinal()
         - start.toordinal(),
-        "proxy": ("participant re-engagement within "
-                  f"{horizon_days}d; densify floor={densify}"),
+        "proxy": (f"{proxy} re-engagement within {horizon_days}d; "
+                  f"densify floor={densify}"),
+        "proxy_kind": proxy,
+        "horizon_days": horizon_days,
+        "date_window": [DATE_MIN.date().isoformat(), DATE_MAX.date().isoformat()],
     }
-    return EnronBundle(files, traces, start, train_days, validation_day,
-                       test_day, stats)
+    return EnronBundle(files, traces, start, train_days, validation_days,
+                       test_days, horizon_days, stats)
 
 
 def load_enron_jsonl(path: Path, **kwargs) -> EnronBundle:
@@ -193,7 +262,7 @@ def _demo() -> None:
          "body": "quarterly budget revenue forecast numbers",
          "participants": ["a@enron.com", "b@enron.com"], "owner": "a"},
         {"message_id": "m2", "date": (base + timedelta(days=1)).isoformat(),
-         "subject": "budget re", "body": "revenue budget forecast quarterly review",
+         "subject": "RE: Budget", "body": "revenue budget forecast quarterly review",
          "participants": ["a@enron.com", "c@enron.com"], "owner": "a"},
         {"message_id": "m3", "date": (base + timedelta(days=2)).isoformat(),
          "subject": "legal", "body": "contract clause review terms litigation",
@@ -202,6 +271,8 @@ def _demo() -> None:
     bundle = load_enron_bundle(records, horizon_days=30)
     assert len(bundle.files) == 3
     assert bundle.stats["access_events_enriched"] == 0
+    # The reply m2 is the one thread re-engagement of m1.
+    assert sum(event.file_id == "m1" for event in bundle.traces) == 1
     # m1 and m2 share participant a@enron.com -> m2 is an authorized neighbor of m1.
     from src.tiering.semantic.tfidf_extractor import TFIDFExtractor
     tfidf = TFIDFExtractor({"max_features": 16, "ngram_range": (1, 1)})

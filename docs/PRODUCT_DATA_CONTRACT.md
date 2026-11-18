@@ -112,7 +112,7 @@ The TF-IDF vectorizer is fit only on training file identities. `document_id` and
 
 This is an executable pipeline prototype, not evidence that semantics predicts
 enterprise demand: synthetic access patterns are assigned independently of file
-content. D uses TF-IDF similarity, excludes the query document, requires shared explicit `metadata.access_groups`, checks candidate creation/modification times, and uses only past neighbor accesses. The synthetic corpus has no access groups, so D has zero eligible neighbors; its metrics only verify pipeline integration. Static text is excluded if modified after the earliest training cutoff. The single-document predictor refuses text modified after the supplied cutoff, since it cannot reconstruct historical versions. Real text version history, real ACL integration, and real access logs remain necessary for enterprise evaluation.
+content. D uses TF-IDF similarity, excludes the query document, requires shared explicit `metadata.access_groups`, checks candidate creation/modification times, and uses only past neighbor accesses. The synthetic corpus has no access groups, so D has zero eligible neighbors; its metrics only verify pipeline integration. Text is used for a row only if the document's `modified_at` is at or before that row's cutoff (the vectorizer itself is fit on documents visible at the earliest training cutoff); training and serving apply the same rule. The single-document predictor refuses text modified after the supplied cutoff, since it cannot reconstruct historical versions. Real text version history, real ACL integration, and real access logs remain necessary for enterprise evaluation.
 
 ## Real-data run (Enron)
 
@@ -122,13 +122,18 @@ and a manifest at `results/metrics/product_ablation_enron.json`. Here text,
 timestamps, and `metadata.access_groups` (sender + recipient addresses) are
 real and content-correlated, so run D obtains genuine eligible neighbors
 (nonzero `retrieval_examples_with_neighbors`). The access-event stream is a
-**participant re-engagement proxy** (a document is accessed when a later email
-shares a participant), optionally densified for sparse documents; the manifest's
+**thread re-engagement proxy** (a document is accessed when a later email in
+the same conversation, meaning the same normalized subject and a shared
+participant, arrives within the horizon), optionally densified for sparse documents; the manifest's
 `data_source` block reports `access_events_real_proxy` vs `access_events_enriched`
 and `enriched_fraction`. The forecast target therefore measures a proxy for
 demand, not native file accesses, and email is not a file store — read A/B/C/D
 comparisons as the result, not absolute numbers. Tier labels use data-relative
 thresholds (recorded in `tier_label_rules`) because real re-engagement never
 reaches the synthetic 50/5-accesses-per-day cutoffs. Cutoff safety is enforced
-identically: documents not yet created at a cutoff are skipped, and later text
-is masked from the training TF-IDF.
+identically: documents not yet created at a cutoff are skipped, documents older
+than the proxy horizon (target zero by construction) are not scored, text is
+used only when visible at the row's cutoff, and neighbor access counts use
+events strictly before the cutoff. The manifest adds `target_prevalence`,
+`leakage_checks`, document-clustered bootstrap `uncertainty`, and a
+`cost_evaluation` using sourced S3 prices.

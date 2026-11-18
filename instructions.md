@@ -11,7 +11,7 @@ This repository prototypes predictive storage tiering. At a cutoff time, it uses
 | C | Metadata + workload + TF-IDF | Test whether text adds signal |
 | D | C + related-document context | Test authorized, past-only retrieval features |
 
-The repository currently runs A/B/C/D training and a SimPy comparison on synthetic data. The single-document MVP serves C. The synthetic trace generator assigns access patterns independently of content, so these runs validate the pipeline and do not show that semantics improves real storage placement.
+A/B/C/D run on synthetic data (a pipeline/null baseline) and on the real Enron email corpus. The MVP serves C and D from a versioned model registry with logging, a drift monitor and rollback. **Current result on real data:** text (C) and authorized retrieval (D) do not beat metadata plus workload (A). C ranks next-day access slightly worse than A (ROC-AUC -0.013, 95% CI [-0.026, -0.001]); D vs C is +0.003 [-0.002, 0.008]. All learned models beat a persistence forecast. Details and caveats: `docs/TEST_REPORT_MVP.md`.
 
 ## Setup
 
@@ -64,19 +64,32 @@ Each corpus record needs a unique `document_id`, cutoff-safe `created_at` and `m
 
 The A/B/C/D experiment also runs on the public Enron email corpus (FERC public domain), which supplies real document text, real timestamps, and real participant-based access groups — giving run D genuine, content-correlated authorized neighbors that synthetic data cannot. See `docs/DATASET_FEASIBILITY.md` for the mapping, the access-event proxy, and caveats.
 
-Parse a bounded sample into cutoff-usable JSONL (point `--source` at a downloaded `enron_mail_*.tar.gz`, an extracted `maildir/` directory, or omit it to download from CMU):
+Download the archive once (443 MB; see `data/raw/enron/SOURCE.md` for the checksum), then parse whole mailboxes. Selecting mailboxes is better than taking the first N files, which in the tarball are alphabetical by mailbox:
 
 ```powershell
-python -m src.tiering.ingestion.fetch_enron --source data/raw/enron_mail.tar.gz --output data/processed/enron_sample.jsonl --max-emails 5000
+curl.exe -L -C - -o data/raw/enron_mail.tar.gz https://www.cs.cmu.edu/~enron/enron_mail_20150507.tar.gz
+tiering fetch-enron --source data/raw/enron_mail.tar.gz --owners dasovich-j,kean-s,shapiro-r --output data/processed/enron_govaffairs.jsonl
 ```
 
-Then run the matched A/B/C/D experiment on it:
+Then run the matched A/B/C/D experiment:
 
 ```powershell
-python -m src.tiering.experiments.product_ablation --enron data/processed/enron_sample.jsonl
+tiering ablate --enron data/processed/enron_govaffairs.jsonl
 ```
 
-Outputs are `results/models/product_ablation_enron.joblib`, `results/metrics/product_ablation_enron.json`, and `results/datasets/enron_cutoff_examples.jsonl`. Emails are one-shot, so access events are a **participant re-engagement proxy** (`--densify K` synthesizes extra events only for sparse documents; the default keeps every event real). The report's `data_source` block records real-vs-enriched event counts and the eligible-neighbor rate. Serve run D against the real model by passing `--model results/models/product_ablation_enron.joblib`.
+Outputs are `results/models/product_ablation_enron.joblib`, `results/metrics/product_ablation_enron.json`, and `results/datasets/enron_cutoff_examples.jsonl`. Emails are one-shot, so access events are a **thread re-engagement proxy**: a later email in the same conversation (same normalized subject, a shared participant) within `--horizon-days` (default 14). `--proxy participant` restores the legacy any-shared-participant proxy, kept only for comparison. `--densify K` synthesizes extra events only for sparse documents; the default keeps every event real. The manifest records `data_source`, `target_prevalence`, `leakage_checks`, bootstrap `uncertainty`, `cost_evaluation`, and `simpy_evaluation`.
+
+## Serve, monitor and roll back
+
+```powershell
+tiering models promote results/models/product_ablation_enron.joblib --note "Enron Government Affairs"
+tiering predict examples/mvp_input.json
+tiering predict examples/mvp_input_d.json --run D_combined_retrieval
+tiering monitor
+tiering models rollback
+```
+
+See `docs/OPERATIONS.md` for configuration, logging, drift alerts, rollback and ownership.
 
 ## Run tests
 
@@ -90,19 +103,20 @@ $base = Join-Path $env:TEMP 'system-test'
 python -m pytest -q --basetemp $base --tb=short
 ```
 
-Latest result: **290 passed**. The full result and interpretation are in `docs/TEST_REPORT_MVP.md`; raw output is `results/metrics/pytest_full_system.txt`.
+Latest result: **299 passed**. The full result and interpretation are in `docs/TEST_REPORT_MVP.md`; raw output is `results/metrics/pytest_full_system.txt`.
 
 ## Architecture map
 
 - `src/tiering/ingestion/`: schemas, data generation, cleaning, validation, and the Enron real-data fetcher/adapter (`fetch_enron.py`, `enron_adapter.py`).
 - `src/tiering/workload/`: past access feature extraction.
-- `src/tiering/semantic/`: TF-IDF, embeddings, vector search, and cutoff/ACL-filtered retrieval features.
-- `src/tiering/models/` and `src/tiering/prediction/`: model training, tier classifier, and C/D prediction entry points.
-- `src/tiering/experiments/`: A/B/C/D experiments and metrics.
+- `src/tiering/semantic/`: TF-IDF, embeddings, vector search, and cutoff/ACL-filtered retrieval features (reference function plus the vectorized `RetrievalIndex`).
+- `src/tiering/models/` and `src/tiering/prediction/`: model training, tier classifier, C/D prediction, and the model registry, prediction log and drift monitor (`registry.py`).
+- `src/tiering/experiments/`: A/B/C/D experiments, metrics, bootstrap uncertainty, and cost-aware placement (`cost_evaluation.py`).
 - `src/tiering/migration/`, `src/tiering/baselines/`, `src/tiering/simulation/`: migration decisions, comparison policies, and SimPy evaluation.
 - `data/`: downloaded and processed data.
 - `results/`: model artifacts, metrics, and cutoff examples.
-- `docs/`: data contract, architecture, feasibility review, and test reports.
+- `configs/pricing_aws_s3_us_east_1.yaml`: sourced storage prices for the cost evaluation.
+- `docs/`: data contract, feasibility review, operations guide, and test reports.
 
 ## Implementation plan to complete the architecture
 
@@ -142,13 +156,23 @@ After data and evaluation are credible, expose prediction through a small servic
 
 **Done when:** the application can be installed, configured, operated against approved data, monitored, and rolled back with documented ownership.
 
+## Plan status (2026-11-18)
+
+| Step | Status |
+|---|---|
+| 1. Cutoff-versioned input bundle | Done for single-version documents: text visibility is per-row `modified_at <= cutoff`, and targets come only from later events. Multi-version text history is not modeled. |
+| 2. Authorized neighbors for D | Done: Enron access groups; fixtures cover shared, disjoint and absent groups, self-exclusion, later versions, and events at the cutoff. |
+| 3. Serve D from the MVP | Done: `tiering predict --run D_combined_retrieval`, with a training/inference parity test. |
+| 4. Validate on real data | Done on one corpus: Enron thread-proxy target with coverage, prevalence, leakage checks and bootstrap CIs. |
+| 5. Cost-aware placement | Done with sourced S3 list prices, a HOT capacity limit, transition and minimum-duration charges, LRU/LFU/age/persistence baselines, and a sensitivity grid. |
+| 6. Package and operate | Done for a single-process, recommendation-only MVP: CLI, versioned registry, rollback, prediction log, drift monitor, `docs/OPERATIONS.md`. Owner roles are unassigned. |
+
 ## Current gaps to keep visible
 
-- The synthetic run remains a pipeline/null baseline; on it semantic benefit is unproven because its access patterns are content-independent.
-- The real Enron run gives D genuine authorized neighbors (participant access groups), but its forecast target rests on a participant re-engagement **proxy** for file access, not native accesses; email is not a file store, so treat it as a research approximation, not an enterprise result.
-- Synthetic documents have no ACL groups, so on the synthetic run D still has zero eligible neighbors (the Enron run does not).
-- D trains, runs through simulation, and can be served from an input corpus snapshot; external ACL and catalog integrations remain future work.
-- The predictor accepts one supplied text version and rejects a modification after cutoff; it does not fetch historical versions itself.
-- There is no enterprise event-log adapter, production service/UI, cost calibration, or deployment workflow.
+- The real-data target is a thread re-engagement **proxy** on email, not native file accesses. Only one mailbox set (Government Affairs) and one horizon (14 days) have been run.
+- Only TF-IDF (256 terms) has been evaluated as the semantic representation.
+- With full S3 transition and minimum-duration fees, no adaptive policy beats keeping young documents in Standard. Tiering value would lie in older documents, which the proxy cannot score.
+- No HTTP service, authentication, live ACL/catalog integration, or enterprise event-log adapter.
+- Owner roles in `docs/OPERATIONS.md` must be assigned before use against approved data.
 
 Use `docs/PRODUCT_DATA_CONTRACT.md` for row-level feature/target rules, `docs/DATASET_FEASIBILITY.md` for public-data limits, and `docs/TEST_REPORT_MVP.md` for current verification results.

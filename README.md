@@ -109,7 +109,7 @@ Make a single HOT/WARM/COLD recommendation with recent access history and docume
 python -m src.tiering.prediction.mvp examples/mvp_input.json
 ```
 
-The input format is demonstrated in `examples/mvp_input.json`. The command uses the combined A/B/C prototype artifact, returns tier probabilities and estimated next-24-hour demand, and rejects access events after the supplied cutoff. Run the product ablation first if the model artifact is missing. Predictions are an MVP demonstration based on synthetic training traces.
+The input format is demonstrated in `examples/mvp_input.json`. The command uses the combined A/B/C prototype artifact, returns tier probabilities and estimated next-24-hour demand, and rejects access events after the supplied cutoff. Run the product ablation first if the model artifact is missing. The output's `limitations` field states what the serving model was trained on; `tiering predict` is the registry-backed equivalent.
 
 Clean the downloaded AG News, Reuters-21578, and 20 Newsgroups data for the optional text-classification benchmark:
 
@@ -122,7 +122,11 @@ News benchmark models can be trained with `python -m src.tiering.models.news_tra
 
 ## Current implementation status
 
-The repository has synthetic file/access generation, metadata and workload feature extraction, and a first matched A/B/C product ablation using content-only TF-IDF, future-demand targets, separate known-file and unseen-file test reports, and SimPy evaluation after a history warm-up cutoff. The synthetic generator assigns content and workload patterns independently, so its semantic scores are pipeline checks rather than evidence that semantics helps. Remaining revamp work includes a verified public text/access dataset adapter, additional seeds and representations, retrieval-context run D, and external-trace evaluation.
+A/B/C/D run on synthetic data (pipeline/null baseline) and on the real Enron email corpus (`tiering fetch-enron`, `tiering ablate --enron ...`). Run D gets genuine authorized neighbors from participant access groups. Reports include target prevalence, leakage checks, document-clustered bootstrap CIs, a persistence baseline, and a cost-aware placement evaluation with sourced S3 prices against LRU/LFU/age baselines.
+
+**Result so far:** on Enron, with a thread re-engagement proxy as the target, text (C) and retrieval (D) do not improve on metadata plus workload (A). C is slightly worse than A at ranking next-day access (ROC-AUC -0.013, 95% CI [-0.026, -0.001]). See [docs/TEST_REPORT_MVP.md](docs/TEST_REPORT_MVP.md).
+
+The MVP serves C and D through `tiering predict`, using a versioned model registry with `tiering models promote|rollback`, a prediction log and `tiering monitor`. See [docs/OPERATIONS.md](docs/OPERATIONS.md) and `instructions.md`.
 
 Existing benchmark results and their limitations are summarized in [docs/BENCHMARK_RESULTS.md](docs/BENCHMARK_RESULTS.md). Dataset options and verified limitations are in [docs/DATASET_FEASIBILITY.md](docs/DATASET_FEASIBILITY.md). Technique roles are explained in [docs/theory.md](docs/theory.md). Treat synthetic metrics as pipeline checks, not evidence of enterprise performance.
 

@@ -1,0 +1,42 @@
+# Amazon S3 list prices, US East (N. Virginia), used by the cost-aware
+# placement evaluation (src/tiering/experiments/cost_evaluation.py).
+#
+# Source: https://aws.amazon.com/s3/pricing/ (checked 2026-11-18). The AWS page
+# renders its tables with JavaScript, so the rates were cross-checked against
+# 2026 third-party price summaries (e.g. cloudforecast.io S3 pricing guide,
+# rabinarayanpatra.com Glacier comparison). Minimum durations and the 128 KB
+# minimum billable size were read directly from the AWS page.
+# "verified" = cross-checked 2026-11-18; "list" = long-standing AWS list price
+# not re-confirmed in that check. Re-verify all values before any cost claim.
+#
+# Mapping to product tiers: HOT = S3 Standard, WARM = S3 Standard-IA,
+# COLD = S3 Glacier Instant Retrieval. AWS documents millisecond first-byte
+# latency for all three, so the tradeoff here is cost, not latency.
+source_url: https://aws.amazon.com/s3/pricing/
+checked: 2026-11-18
+currency: USD
+tiers:
+  HOT:
+    storage_class: S3 Standard
+    storage_per_gb_month: 0.023        # first 50 TB; list
+    get_per_1000: 0.0004               # verified
+    retrieval_per_gb: 0.0
+    transition_in_per_1000: 0.0
+    min_storage_days: 0
+    min_billable_bytes: 0
+  WARM:
+    storage_class: S3 Standard-IA
+    storage_per_gb_month: 0.0125       # verified
+    get_per_1000: 0.001                # list
+    retrieval_per_gb: 0.01             # list
+    transition_in_per_1000: 0.01       # lifecycle transition; list
+    min_storage_days: 30               # verified (AWS page)
+    min_billable_bytes: 131072         # 128 KB; verified (AWS page)
+  COLD:
+    storage_class: S3 Glacier Instant Retrieval
+    storage_per_gb_month: 0.004        # verified
+    get_per_1000: 0.01                 # list
+    retrieval_per_gb: 0.03             # verified
+    transition_in_per_1000: 0.02       # lifecycle transition; list
+    min_storage_days: 90               # verified (AWS page)
+    min_billable_bytes: 131072         # 128 KB; verified (AWS page)

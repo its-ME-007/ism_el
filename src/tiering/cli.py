@@ -2,6 +2,7 @@
 
 import argparse
 from datetime import datetime
+import json
 from pathlib import Path
 
 import yaml
@@ -52,11 +53,96 @@ def main(argv=None):
     generate_parser.add_argument("--output-dir", default="data/generated")
     generate_parser.add_argument("--num-files", type=int)
     generate_parser.add_argument("--duration-hours", type=float)
+
+    fetch = subparsers.add_parser("fetch-enron", help="parse Enron mailboxes to JSONL")
+    fetch.add_argument("--source", default="data/raw/enron_mail.tar.gz")
+    fetch.add_argument("--output", default="data/processed/enron_sample.jsonl")
+    fetch.add_argument("--owners", default="", help="comma-separated mailbox names")
+    fetch.add_argument("--max-emails", type=int, default=0)
+
+    ablate = subparsers.add_parser("ablate", help="train and score A/B/C/D")
+    ablate.add_argument("--enron", help="parsed Enron JSONL; omit for synthetic")
+    ablate.add_argument("--proxy", choices=["thread", "participant"], default="thread")
+    ablate.add_argument("--horizon-days", type=int, default=14)
+    ablate.add_argument("--bootstrap-reps", type=int, default=1000)
+
+    predict = subparsers.add_parser("predict", help="recommend a tier for one document")
+    predict.add_argument("input", type=Path)
+    predict.add_argument("--run", choices=["C_combined", "D_combined_retrieval"],
+                         default="C_combined")
+    predict.add_argument("--model", type=Path, help="bundle path; default: active version")
+    predict.add_argument("--registry", type=Path, default=Path("results/models"))
+    predict.add_argument("--log", type=Path, default=Path("results/logs/predictions.jsonl"))
+    predict.add_argument("--no-log", action="store_true")
+
+    models = subparsers.add_parser("models", help="manage versioned model bundles")
+    models.add_argument("action", choices=["list", "promote", "rollback"])
+    models.add_argument("bundle", nargs="?", type=Path)
+    models.add_argument("--note", default="")
+    models.add_argument("--registry", type=Path, default=Path("results/models"))
+
+    watch = subparsers.add_parser("monitor", help="summarize served predictions; flag drift")
+    watch.add_argument("--log", type=Path, default=Path("results/logs/predictions.jsonl"))
+    watch.add_argument("--registry", type=Path, default=Path("results/models"))
+    watch.add_argument("--last", type=int, default=1000)
+    watch.add_argument("--threshold", type=float, default=0.2)
+    watch.add_argument("--min-predictions", type=int, default=50)
+
     args = parser.parse_args(argv)
     if args.command == "generate":
         result = generate(args.config, args.output_dir, args.num_files, args.duration_hours)
         print(f"Wrote {result['file_count']} files and {result['event_count']} access events.")
         print(f"Dataset: {result['files']}\nTraces: {result['traces']}\nSeed: {result['seed']}")
+    elif args.command == "fetch-enron":
+        from src.tiering.ingestion.fetch_enron import fetch
+        owners = {name.strip() for name in args.owners.split(",") if name.strip()} or None
+        fetch(args.source, Path(args.output), args.max_emails, owners=owners)
+    elif args.command == "ablate":
+        from src.tiering.experiments import product_ablation as ablation
+        if args.enron:
+            report = ablation.run_enron_ablation(
+                jsonl=Path(args.enron), horizon_days=args.horizon_days,
+                proxy=args.proxy, bootstrap_reps=args.bootstrap_reps)
+        else:
+            report = ablation.run_product_ablation(bootstrap_reps=args.bootstrap_reps)
+        print(f"Model: {report['model_path']}")
+    elif args.command == "predict":
+        from src.tiering.prediction import registry
+        from src.tiering.prediction.mvp import predict_document
+        if args.model:
+            model_id, model_path = f"file:{args.model}", args.model
+        else:
+            model_id, model_path = registry.active_model(args.registry)
+        payload = json.loads(args.input.read_text(encoding="utf-8"))
+        result = predict_document(payload, model_path, args.run)
+        result["model_version"] = model_id
+        if not args.no_log:
+            registry.log_prediction(result, model_id, args.log)
+        print(json.dumps(result, indent=2))
+    elif args.command == "models":
+        from src.tiering.prediction import registry
+        if args.action == "promote":
+            if not args.bundle:
+                parser.error("models promote needs a bundle path")
+            print(json.dumps(registry.promote(args.bundle, args.registry, args.note), indent=2))
+        elif args.action == "rollback":
+            print(json.dumps(registry.rollback(args.registry), indent=2))
+        else:
+            print(json.dumps(registry.load_registry(args.registry), indent=2))
+    elif args.command == "monitor":
+        import joblib
+        from src.tiering.prediction import registry
+        share = None
+        try:
+            _, model_path = registry.active_model(args.registry)
+            bundle = joblib.load(model_path)
+            share = (bundle.get("served_tier_share_reference")
+                     or bundle.get("training_tier_share"))
+        except RuntimeError:
+            pass
+        print(json.dumps(registry.monitor(args.log, share, args.last, args.threshold,
+                                          args.min_predictions),
+                         indent=2))
 
 
 if __name__ == "__main__":

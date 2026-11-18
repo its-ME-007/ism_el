@@ -1,0 +1,40 @@
+{
+  "document_id": "example-email-query",
+  "cutoff": "2001-05-14T00:00:00+00:00",
+  "created_at": "2001-05-11T15:20:00+00:00",
+  "modified_at": "2001-05-11T15:20:00+00:00",
+  "filename": "RE: draft comments on wholesale power price cap",
+  "category": "operations",
+  "size_bytes": 2400,
+  "text": "RE: draft comments on wholesale power price cap\nAttached is the draft of our comments to the commission on the proposed price cap for wholesale electricity markets in California. Please send questions or changes before the meeting on Monday so we can file the response this week.",
+  "metadata": {
+    "access_groups": ["policy-team@example.com", "regulatory-lead@example.com"],
+    "file_type": "document",
+    "confidentiality": "internal"
+  },
+  "access_events": [
+    {"timestamp": "2001-05-12T09:05:00+00:00", "operation": "read"},
+    {"timestamp": "2001-05-13T17:40:00+00:00", "operation": "read"}
+  ],
+  "corpus": [
+    {
+      "document_id": "example-email-neighbor",
+      "created_at": "2001-05-09T10:00:00+00:00",
+      "modified_at": "2001-05-09T10:00:00+00:00",
+      "text": "FERC order on California electricity prices\nThe commission order on wholesale power prices and the price cap is attached. We need comments from the regulatory group on the market response and the settlement process.",
+      "metadata": {"access_groups": ["policy-team@example.com"]},
+      "access_events": [
+        {"timestamp": "2001-05-13T08:30:00+00:00", "operation": "read"},
+        {"timestamp": "2001-05-13T14:10:00+00:00", "operation": "read"}
+      ]
+    },
+    {
+      "document_id": "example-email-unauthorized",
+      "created_at": "2001-05-10T10:00:00+00:00",
+      "modified_at": "2001-05-10T10:00:00+00:00",
+      "text": "California wholesale power price cap comments draft for the commission meeting.",
+      "metadata": {"access_groups": ["other-team@example.com"]},
+      "access_events": [{"timestamp": "2001-05-13T12:00:00+00:00", "operation": "read"}]
+    }
+  ]
+}

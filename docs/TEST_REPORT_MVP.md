@@ -1,115 +1,235 @@
 # Current Project Test Report
 
-**Run date:** 2026-11-11
+**Run date:** 2026-11-18
 **Python:** 3.13.6
 **Pytest:** 9.1.1
 
-## Project status covered by this report
+## Status in one paragraph
 
-The project currently has a runnable synthetic predictive-tiering workflow:
-
-- A: metadata and past workload.
-- B: TF-IDF semantic features only.
-- C: metadata, past workload, and TF-IDF.
-- D: C plus permission-filtered related-document features based on past accesses; now also available from the prediction command with a corpus snapshot.
-- A/B/C/D model evaluation and a SimPy migration comparison on the same synthetic workload.
-- A single-document command that serves the combined C model.
-
-This is the current prototype status, not a claim that the full enterprise architecture has been validated.
+The A/B/C/D pipeline now runs end to end on the real Enron email corpus, and
+the MVP serves C and D from a versioned, rollback-capable model registry.
+**On real data, document text (C) and authorized retrieval context (D) do not
+improve on metadata and workload features alone (A).** C is slightly *worse*
+than A at ranking next-day access (ROC-AUC -0.013, 95% CI [-0.026, -0.001]).
+D is indistinguishable from C (+0.003, CI [-0.002, 0.008]). Text alone (B) is
+at chance (ROC-AUC 0.474). All learned models beat a last-24h persistence
+forecast at ranking (A +0.131, CI [0.094, 0.169]). Under full Amazon S3 fees,
+keeping documents in their first two weeks in Standard is cheapest. Without
+per-move fees, A cuts cost by 34.6% versus the best static tier (1 MB
+objects). The target is a thread re-engagement proxy, not a file-access log.
 
 ## Automated tests
-
-The tests in `tests/test_mvp_architecture.py` cover self-exclusion and ACL filtering, cutoff-safe documents, past-only neighbor access counts, private-by-default documents with no ACL groups, rejection of future document versions/events, D inference with an authorized corpus neighbor, and duplicate/query-document corpus validation.
-
-Full suite command from the project root in PowerShell:
 
 ```powershell
 $env:TEMP = Join-Path (Get-Location) '.pytest-temp'
 $env:TMP = $env:TEMP
 New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
-$base = Join-Path $env:TEMP 'system-test'
-python -m pytest -q --basetemp $base --tb=short
+python -m pytest -q --basetemp (Join-Path $env:TEMP 'system-test') --tb=short
 ```
 
-**Earlier baseline: 282 passed. After D serving and corpus-validation changes: 284 passed. Current result after adding the Enron adapter and the D feature-parity test: 290 passed in 87.42 seconds.** No failures or errors. Pytest temporary files need to live under the workspace in this managed Windows environment; the default sandbox temp directory has caused permission failures in prior runs.
+**299 passed** (290 at the previous report). Output:
+`results/metrics/pytest_full_system.txt`. The 9 new tests are in
+`tests/test_real_data_validity.py` and `tests/test_registry.py`:
 
-Captured output: `results/metrics/pytest_full_system.txt`.
+- the thread proxy counts replies, but not unrelated mail between the same people;
+- messages dated outside 1998-2002 are dropped;
+- weekly split label windows do not overlap;
+- documents older than the proxy horizon are not scored;
+- text counts only when its version is visible at the row's cutoff;
+- the vectorized `RetrievalIndex` matches the reference retrieval function on
+  randomized fixtures with ties, including that a neighbor event exactly at
+  the cutoff is excluded;
+- the document-clustered bootstrap reports zero difference for identical
+  predictions;
+- registry promote, rollback, prediction log (no text) and the drift monitor
+  with its minimum-sample guard work.
 
-## Full workflow run
+`cost_evaluation.py` and `enron_adapter.py` also carry `__main__` self-checks.
 
-Command:
+## Fixes that changed earlier results
+
+The 2026-11-14 Enron numbers (ROC-AUC 1.000, "D 0.713 hot-hit rate") are
+superseded. They came from a stand-in fake maildir and these defects:
+
+| Defect | Effect | Fix |
+|---|---|---|
+| TF-IDF zeroed for any document created after the *earliest* training cutoff | ~80% of Enron rows had empty text in training; serving used real text (train/serve skew) | Text is used when `modified_at <= row cutoff`, in training, retrieval and SimPy alike |
+| Documents older than the 14-day proxy horizon were scored | Their target is 0 by construction, so ROC-AUC was trivially 1.0 | `max_sample_age_days = horizon_days` |
+| Proxy = any later email sharing *any* participant | The mailbox owner is on nearly every email, so the target measured owner activity | Thread proxy: same normalized subject plus a shared participant |
+| `all_test` rows never received retrieval features | D's headline "all files" score had an empty retrieval context | All splits enriched |
+| SimPy evaluation started at synthetic day 26 for Enron | Wrong window | Uses the data's first test day; bounded to 28 days |
+| Duplicate copies of one email under different Message-IDs | Copies could straddle the train/held-out split | Content-key dedupe |
+| Neighbor access counts included events at the cutoff instant | One email could feed a feature and the label | Strictly before the cutoff, matching workload features |
+| Tier head trained unweighted on 97% COLD labels | Always predicted COLD (macro-F1 0.329) | Balanced class weights on real data; the unweighted report is kept at `results/metrics/product_ablation_enron_unweighted_tier.json` |
+
+The synthetic rerun is unchanged where it should be. SimPy latency is
+936.4 ms for A/C/D and 996.2 ms for B, against 3137.5 ms all-cold, with
+78/73 migrations: the same as the previous report.
+
+## Real-data experiment (Enron)
+
+**Data:** `enron_mail_20150507.tar.gz` (CMU; checksum in
+`data/raw/enron/SOURCE.md`), Government Affairs mailboxes `dasovich-j`,
+`kean-s` and `shapiro-r`. The fetcher parsed 59,656 records, leaving 23,946
+unique emails from 1998-09 to 2002-09 after date clipping and dedupe. The
+proxy produced 18,199 thread re-engagement events, all real
+(`enriched_fraction` 0.0). 7,309 documents were re-engaged at least once.
 
 ```powershell
-python -m src.tiering.experiments.product_ablation
+tiering fetch-enron --source data/raw/enron_mail.tar.gz --owners dasovich-j,kean-s,shapiro-r --output data/processed/enron_govaffairs.jsonl
+tiering ablate --enron data/processed/enron_govaffairs.jsonl
 ```
 
-The complete synthetic workflow finished successfully. It trained and evaluated A/B/C/D, created the cutoff-example dataset, and ran all four prediction paths plus the all-cold baseline through SimPy. Main outputs:
+Full manifest: `results/metrics/product_ablation_enron.json`. Runtime is
+about 48 minutes on this laptop.
 
-- Metrics and manifest: `results/metrics/product_ablation_synthetic.json`
-- Model bundle: `results/models/product_ablation_synthetic.joblib`
-- 504 cutoff examples: `results/datasets/product_cutoff_examples.jsonl`
-- Captured command output: `results/metrics/product_ablation_full_system.txt`
+**Splits and prevalence** (weekly cutoffs; rows = document x cutoff; only
+documents at most 14 days old):
 
-The single-document C prediction also completed successfully with `examples/mvp_input.json`. It recommended **COLD**, estimated **3.95** accesses in the following 24 hours, and returned a **0.974** any-access probability. Captured output: `results/metrics/mvp_full_system.txt`.
+| Split | Cutoffs | Rows | Documents | Any access next 24h | HOT / WARM / COLD |
+|---|---:|---:|---:|---:|---|
+| Train | 43 | 21,193 | 10,826 | 2.1% | 0.6% / 1.5% / 97.9% |
+| Validation | 9 | 4,028 | 2,385 | 3.6% | 1.1% / 2.5% / 96.4% |
+| Test, all files | 6 | 6,089 | 3,509 | 2.6% | 0.6% / 2.0% / 97.4% |
+| Test, unseen files | 6 | 1,228 | 719 | 2.3% | 0.5% / 1.8% / 97.7% |
 
-D serving also ran with `examples/mvp_input_d.json` and `--run D_combined_retrieval`. It returned one shared-group neighbor (cosine similarity 0.421) and one past access in that neighbor's 24-hour history. This verifies D inference with a controlled fixture; external ACL and catalog integrations remain untested.
+Tier labels are data-relative: HOT is 2 or more accesses in 24h, WARM is 1,
+COLD is 0. 30,806 rows had at least one authorized retrieval neighbor.
 
-## SimPy snapshot
+**Leakage checks** (the run fails if any is false): train label windows end
+before validation, and validation windows end before test; train and
+held-out file IDs are disjoint; TF-IDF is fit only on training documents
+visible at the earliest cutoff; workload and neighbor features use events
+strictly before the cutoff. Events exactly at a cutoff: 0.
 
-| Run | Mean access latency (ms) | Migrations | Storage cost | Migration cost |
-|---|---:|---:|---:|---:|
-| All-cold baseline | 3137.45 | 0 | 0.000062 | 0 |
-| A: metadata/workload | 936.39 | 78 | 0.000400 | 235377.9984 |
-| B: semantic only | 996.18 | 73 | 0.000403 | 238532.7568 |
-| C: combined | 936.39 | 78 | 0.000400 | 235377.9984 |
-| D: combined/retrieval | 936.39 | 78 | 0.000400 | 235377.9984 |
+### A/B/C/D on identical test rows
 
-Costs use the simulator's configured values and units. They are not measured cloud prices. These results are synthetic pipeline checks, not estimates of production savings.
+These numbers are document-clustered bootstrap estimates with 95% CIs, from
+1,000 resamples over the test (all files) rows. P is the last-24h
+persistence forecast.
 
-## Real-data run (Enron)
+| Run | Tier macro-F1 | Any-access ROC-AUC | Avg. precision | Count MAE |
+|---|---|---|---|---|
+| P persistence | 0.396 [0.372, 0.420] | 0.756 [0.714, 0.797] | 0.167 [0.121, 0.231] | 0.135 |
+| A metadata + workload | 0.382 [0.364, 0.401] | **0.887** [0.862, 0.908] | **0.177** [0.139, 0.226] | 0.067 |
+| B text only | 0.333 [0.322, 0.347] | 0.474 [0.418, 0.526] | 0.058 [0.033, 0.104] | 0.059 |
+| C A + text | **0.404** [0.380, 0.427] | 0.874 [0.848, 0.898] | 0.143 [0.113, 0.184] | 0.063 |
+| D C + retrieval | 0.383 [0.363, 0.404] | 0.877 [0.851, 0.900] | 0.154 [0.122, 0.196] | 0.064 |
 
-The A/B/C/D pipeline now also runs on the Enron email corpus through
-`fetch_enron.py` + `enron_adapter.py` (`--enron data/processed/enron_sample.jsonl`).
-Unlike the synthetic run, run D obtains **real, content-correlated authorized
-neighbors** because `metadata.access_groups` comes from genuine sender/recipient
-sets.
+Paired differences, as mean [95% CI]:
 
-> **Caveat on the numbers below.** The 400-document run reported here was driven
-> by a *stand-in* fake maildir (topic-correlated synthetic emails), not the
-> 400MB CMU tarball, so the pipeline could be exercised end-to-end without the
-> download. Point `fetch_enron --source` at the real tarball to reproduce on
-> genuine Enron data. Treat these figures as a pipeline demonstration, and the
-> A/B/C/D *ordering* — not the absolute values — as the quantity of interest.
+| Comparison | Macro-F1 | ROC-AUC | Avg. precision |
+|---|---|---|---|
+| A - P | -0.015 [-0.038, 0.009] | +0.131 [0.094, 0.169] | +0.006 [-0.056, 0.062] |
+| C - A | +0.022 [-0.002, 0.044] | -0.013 [-0.026, -0.001] | -0.033 [-0.060, -0.004] |
+| D - C | -0.021 [-0.038, -0.003] | +0.003 [-0.002, 0.008] | +0.010 [-0.002, 0.023] |
+| D - A | +0.001 [-0.021, 0.024] | -0.010 [-0.022, 0.002] | -0.023 [-0.052, 0.008] |
+| B - A | -0.049 [-0.072, -0.026] | -0.413 [-0.471, -0.353] | -0.119 [-0.164, -0.069] |
 
-Coverage (`results/metrics/product_ablation_enron.json` → `data_source`):
-400 documents, 9,432 access events (all real participant re-engagement proxy,
-`enriched_fraction` 0.0), 7 distinct access groups, 149-day span, and
-**314 cutoff examples with ≥1 authorized neighbor** (vs 0 on the synthetic run).
-Tier labels are data-relative (`HOT ≥2`, `WARM 1`, `COLD 0` future accesses/24h).
+On unseen files the pattern is the same and wider: C - A ROC-AUC is -0.012
+[-0.035, 0.011], and D - C is -0.005 [-0.014, 0.003].
 
-A/B/C/D on identical real-shaped examples (`future_period_all_files`):
+Count MAE is not a useful separator here. Near-zero predictions score well
+when 97% of targets are 0; B has the lowest MAE while its ranking is at
+chance.
 
-| Run | Tier accuracy | Macro-F1 | Any-access ROC-AUC | Count MAE |
-|---|---:|---:|---:|---:|
-| A: metadata/workload | 0.982 | 0.640 | 1.000 | 0.180 |
-| B: semantic only | 0.893 | 0.314 | 0.607 | 0.649 |
-| C: combined | 0.970 | 0.617 | 1.000 | 0.162 |
-| D: combined/retrieval | 0.985 | 0.645 | 1.000 | 0.159 |
+**Reading:** past workload and age carry the predictable signal. Adding
+TF-IDF text costs a little ranking quality, probably because 256 sparse text
+features dilute 21k training rows with about 2% positives. Retrieval
+recovers about a quarter of that loss, and its CI includes zero. The small
+C-over-A macro-F1 gain is borderline and reverses for D. This is a null
+result for "semantics improves tiering" on this corpus and target, not
+evidence that semantics cannot help elsewhere.
 
-SimPy hot-tier hit rate rises with context — A 0.582 → C 0.675 → **D 0.713** —
-and D edges A/C on tier accuracy and count MAE, i.e. retrieval context adds
-signal when authorized neighbors actually exist. B (text only) is weakest, as
-expected. The single-document predictor also served run D against
-`results/models/product_ablation_enron.joblib`, returning a tier plus a
-**nonzero** neighbor summary (`neighbor_count` 5) from authorized neighbors.
+### Cost-aware placement
 
-## Findings
+Implemented in `src/tiering/experiments/cost_evaluation.py`, with prices in
+`configs/pricing_aws_s3_us_east_1.yaml`: S3 Standard / Standard-IA / Glacier
+Instant Retrieval, us-east-1, checked 2026-11-18. The cost model charges
+billable size (128 KB minimum on IA/GIR), GET and retrieval fees, lifecycle
+transition and restore fees, and early-deletion charges under the 30/90-day
+minimums. A HOT capacity limit applies as a policy limit. Every policy is
+scored on the same 6,089 test rows from realized next-24h accesses. The
+grid covers object size {actual, 1 MB, 10 MB} x retrieval fee {0.5x, 1x, 2x}
+x HOT capacity {100%, 25%, 10%} x fee model {full S3, storage + access
+only}. AWS documents millisecond first-byte latency for all three classes,
+so the trade-off here is cost. "Accesses served from HOT" is the latency
+proxy.
 
-- **D is integrated in training and SimPy evaluation, but did not retrieve any neighbors.** The synthetic documents have no explicit `metadata.access_groups`; private-by-default filtering therefore yields `retrieval_examples_with_neighbors: 0`. D matching C is expected with an empty retrieval context and says nothing about retrieval's value when authorized neighbors exist.
-- **A and C also produce the same simulation snapshot.** Synthetic access patterns are assigned independently from document content, so semantics has no designed demand signal in this data.
-- **D inference accepts a corpus snapshot supplied in the request.** It is not connected to an external catalog or ACL service; callers are responsible for providing the authorized snapshot.
-- **No enterprise data is included.** Real document versions, actual ACLs, access logs, calibrated demand thresholds, and measured tier prices are still needed for external validity.
+Saving versus the best static tier (1x retrieval fee):
 
-## Bottom-line status
+| Setting | A | C | D | LRU | LFU | Age | Persistence | Oracle |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 MB, no capacity limit, full S3 fees | -1514% | -1361% | -1374% | -1711% | -1656% | -612% | -1541% | -1461% |
+| 1 MB, no capacity limit, storage + access only | **+34.6%** | +31.9% | +33.1% | -8.3% | -11.4% | +16.2% | -24.3% | +79.0% |
+| 1 MB, HOT ≤ 10%, storage + access only | **+29.1%** | +26.9% | +28.8% | -5.4% | -11.8% | +10.8% | -21.1% | +79.5% |
+| Actual email size, HOT ≤ 25%, storage + access only | +11.2% | +10.7% | +10.4% | -134.6% | -133.1% | **+17.6%** | -3.8% | +34.7% |
 
-The executable prototype and its cutoff/permission tests pass (290). The A/B/C/D pipeline now runs on real Enron text with genuine participant access groups, so D evaluates against nonzero authorized neighbors (314 examples) and the run yields a sensible A→C→D ordering. The remaining honesty gap is the forecast target: access events are a participant re-engagement proxy for file access, and email is not a file store, so this is a research approximation rather than an enterprise measurement. Reproduce on the real CMU tarball, and — as separate follow-on work (plan steps 5–6) — add cost-aware baselines (LRU/LFU/age) with price sensitivity and a recommendation-only operator service before any product performance claim.
+**Reading:**
+
+- With full S3 fees, every adaptive policy loses to keeping these young
+  documents in Standard. That includes the myopic oracle that knows the
+  realized counts. One transition plus the 90-day Glacier IR minimum costs
+  more than weeks of storage savings on a 1 MB object.
+- Real tiering value would sit in the long tail of older documents, which
+  this target cannot score. There, an age rule decides placement anyway.
+- Without per-move fees, the learned forecasters beat LRU, LFU, age and
+  persistence. A is best, D is within about 1.5 points of A, and text and
+  retrieval add nothing.
+- Emails smaller than 128 KB are billed at the minimum on IA/GIR, so at
+  actual sizes the age rule wins.
+
+### SimPy (first 28 test days, 2,875 documents, 2,138 accesses)
+
+| Run | Mean latency (ms) | HOT hit rate | Migrations |
+|---|---:|---:|---:|
+| All-cold | 106.2 | 0.0% | 0 |
+| A | 95.6 | 1.1% | 218 |
+| B | 103.7 | 0.4% | 25 |
+| C | 98.7 | 0.7% | 167 |
+| D | 99.2 | 1.2% | 147 |
+
+Hit rates are low because most proxy accesses occur within a day or two of
+an email's arrival. The controller needs two consistent daily predictions
+(hysteresis) before it migrates, so most promotions land after the burst.
+The simulator uses configured tier latencies, not measured ones. The cost
+evaluation above is the primary placement result.
+
+## MVP verification
+
+```powershell
+tiering models promote results/models/product_ablation_enron.joblib --note "Enron Government Affairs"
+tiering predict examples/mvp_input_d_enron.json --run D_combined_retrieval
+tiering predict examples/mvp_input_d_enron.json
+tiering monitor
+tiering models rollback
+```
+
+- **Registry:** `models promote` created `product_ablation_enron-2ae56038a9a3`.
+  `rollback` returned to the previous version, and re-promotion
+  reactivated the Enron model.
+- **D:** HOT 0.101 / WARM 0.332 / COLD 0.568 (COLD), any-access 0.064, with
+  one authorized neighbor (cosine 0.490, 2 past accesses in 24h). The
+  same-topic document with a different access group was excluded.
+- **C:** WARM 0.526, any-access 0.075.
+- **Logging and monitoring:** both predictions were logged with their model
+  version. `monitor` compared served shares to D's validation tier mix and
+  withheld the alarm below 50 predictions.
+- **Vocabulary:** `examples/mvp_input_d.json` still finds its neighbor
+  (0.421) under the synthetic model. Under the Enron model its corpus texts
+  share no vocabulary with the 256-term TF-IDF, so they embed to zero and no
+  neighbor is returned. This is expected; use the Enron-style example with
+  the Enron model.
+
+## Limits that still apply
+
+- The target is a thread re-engagement proxy on email, not file-access logs.
+  Results are for this corpus and three related mailboxes. A second mailbox
+  set or horizon has not been run.
+- Only TF-IDF (256 terms) is evaluated. Sentence embeddings are an optional
+  dependency and are not tested.
+- The MVP is recommendation-only, single process, with a file-based
+  registry. It has no HTTP service, authentication or live ACL/catalog
+  connection. Owner roles in `docs/OPERATIONS.md` are unassigned.
+- Prices are list prices, re-verify before any cost claim. The cost
+  decisions are myopic.
