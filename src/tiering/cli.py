@@ -88,7 +88,52 @@ def main(argv=None):
     watch.add_argument("--threshold", type=float, default=0.2)
     watch.add_argument("--min-predictions", type=int, default=50)
 
+    store = subparsers.add_parser("store", help="semantic tiered file store")
+    store.add_argument("--root", type=Path, default=Path("data/store"))
+    store.add_argument("--hot-capacity-gb", type=float, help="persisted HOT cap")
+    store.add_argument("--k", type=int, help="persisted: neighbors prefetched per access")
+    for tier in ("hot", "warm", "cold"):
+        store.add_argument(f"--{tier}-dir", help=f"persisted: directory for {tier.upper()}")
+    actions = store.add_subparsers(dest="action", required=True)
+    put = actions.add_parser("put", help="store a file (counts as an access)")
+    put.add_argument("path", type=Path)
+    put.add_argument("--id", help="file id; default: file name")
+    put.add_argument("--groups", default="", help="comma-separated ACL groups")
+    get = actions.add_parser("get", help="read a file (promotes it and its neighbors)")
+    get.add_argument("file_id")
+    get.add_argument("--out", type=Path, help="write bytes here; default: stdout")
+    actions.add_parser("tick", help="demote idle files")
+    actions.add_parser("status", help="files and bytes per tier")
+    actions.add_parser("verify", help="check bytes sit in the indexed tier")
+
     args = parser.parse_args(argv)
+    if args.command == "store":
+        import sys
+        from src.tiering.store import TieredStore
+        tier_dirs = {name.upper(): getattr(args, f"{name}_dir")
+                     for name in ("hot", "warm", "cold") if getattr(args, f"{name}_dir")}
+        opened = TieredStore(
+            args.root, k=args.k, tier_dirs=tier_dirs or None,
+            hot_capacity_bytes=(int(args.hot_capacity_gb * 1024 ** 3)
+                                if args.hot_capacity_gb is not None else None))
+        if args.action == "put":
+            groups = [g.strip() for g in args.groups.split(",") if g.strip()]
+            tier = opened.put(args.id or args.path.name, args.path.read_bytes(), groups)
+            print(f"{args.id or args.path.name}: {tier.value}")
+        elif args.action == "get":
+            data = opened.get(args.file_id)
+            if args.out:
+                args.out.write_bytes(data)
+            else:
+                sys.stdout.buffer.write(data)
+        elif args.action == "tick":
+            print(f"{opened.tick()} files moved")
+        elif args.action == "verify":
+            bad = opened.verify()
+            print(json.dumps({"ok": not bad, "misplaced": bad}, indent=2))
+        else:
+            print(json.dumps(opened.status(), indent=2))
+        return
     if args.command == "generate":
         result = generate(args.config, args.output_dir, args.num_files, args.duration_hours)
         print(f"Wrote {result['file_count']} files and {result['event_count']} access events.")

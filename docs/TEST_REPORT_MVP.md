@@ -262,8 +262,68 @@ access in the window):
   about 15-20% less storage, 5-12% lower latency, prefetch precision 0.25-0.29
   vs 0.17-0.20. At coupling 0 the semantic advantage narrows (equal precision
   from 24 h up) but storage stays lower.
-- Limits: synthetic trace, one seed, no HOT capacity limit, configured tier
-  latencies and costs, and the storage charge uses end-of-interval placement.
+- Limits: synthetic trace, one seed, configured tier latencies and costs, and
+  the storage charge uses end-of-interval placement.
+
+### With a HOT capacity limit
+
+`GraphPrefetchPolicy(hot_capacity_bytes=...)`: a read file evicts HOT files to
+WARM until it fits (unread prefetches first, then least recently touched); a
+prefetch only takes free HOT space, otherwise it lands in WARM. HOT idle 72 h.
+Total stored bytes 217 GB.
+
+| HOT cap | Coupling | Hit: recency / graph / random | Latency ms: recency / graph / random |
+|---|---|---|---|
+| 2% | 0.8 | 0.259 / **0.310** / 0.272 | 10,921 / **9,230** / 9,428 |
+| 5% | 0.8 | 0.476 / **0.517** / 0.487 | 8,464 / **6,841** / 6,985 |
+| 10% | 0.8 | 0.694 / **0.702** / 0.685 | 6,225 / **4,755** / 5,000 |
+| 20% | 0.8 | **0.882** / 0.876 / 0.862 | 4,357 / **2,810** / 3,150 |
+| 5% | 0 (control) | 0.544 / 0.533 / **0.545** | 7,739 / 6,583 / **6,618** |
+| 20% | 0 (control) | **0.901** / 0.875 / 0.885 | 3,769 / **2,672** / 2,772 |
+
+- Prefetch cuts mean latency 15-35% at every cap, mostly by moving cold
+  neighbors to WARM (10x the COLD throughput) when HOT is full.
+- With demand coupled to content, the semantic graph also raises HOT hit rate
+  at tight caps (2-10%) and beats random ACL-group neighbors on hit rate,
+  latency (2-11% lower), storage (about 12% lower) and prefetch precision
+  (about 2x). In the control, semantic and random neighbors tie.
+- Costs: storage about +30-40% over recency (WARM placements) and 3-6x the
+  evictions, i.e. migration churn that real transition fees would charge for.
+- The first version let prefetches evict read files (LRU saw both as just
+  touched); evicting unread prefetches first fixed a hit-rate loss.
+
+## Tiered store MVP (`tiering store`)
+
+`src/tiering/store.py`: `TieredStore` keeps bytes in `hot/`, `warm/`, `cold/`
+directories (each can point elsewhere, e.g. COLD on a NAS), an atomically
+written `index.json`, and `access_log.jsonl`. Put and get go through
+`GraphPrefetchPolicy`; `tick` demotes idle files. The semantic graph updates
+incrementally on put and refits TF-IDF after 25% corpus growth. File ids are
+validated (no path traversal); an index left stale by a crash mid-move is
+repaired on read.
+
+```powershell
+tiering store --root data/store --hot-capacity-gb 50 put report.pdf --groups finance
+tiering store --root data/store get report.pdf --out copy.pdf
+tiering store --root data/store tick
+tiering store --root data/store status
+```
+
+End-to-end replay through the real on-disk store (`python -m
+src.tiering.experiments.store_benchmark --coupling 0.8`): 7-day window,
+pre-window files put at creation time, payloads scaled 1/10,000, latency
+modelled from real sizes.
+
+| Run | HOT hit | First touch from HOT | Modelled latency (ms) | get / put / tick (ms) | Cap respected | Misplaced |
+|---|---:|---:|---:|---|---|---:|
+| Recency | 0.947 | 0.128 | 3,935 | 22 / 9 / 5 | - | 0 |
+| Graph k=5 | 0.984 | 0.672 | 1,696 | 24 / 15 / 6 | - | 0 |
+| Recency, 5% cap | 0.461 | 0.023 | 8,627 | 39 / 31 / 15 | yes | 0 |
+| Graph k=5, 5% cap | 0.508 | 0.076 | 6,707 | 20 / 25 / 9 | yes | 0 |
+
+The store reproduces the simulator's direction. Throughput is the limit: the
+full `index.json` rewrite per operation costs 20-40 ms with about 1,800 files.
+Move the index to SQLite before larger corpora or concurrent writers.
 
 ## MVP verification
 

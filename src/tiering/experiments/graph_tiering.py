@@ -28,7 +28,8 @@ from src.tiering.simulation.simulator import SimPySimulator
 
 
 def run_graph_tiering(bundle, hot_idle_hours=(6, 24, 72, 168, 336), k=5,
-                      min_similarity=0.3, window_days=28, seed=0):
+                      min_similarity=0.3, window_days=28, seed=0,
+                      capacity_fractions=(0.02, 0.05, 0.10, 0.20), capped_idle_hours=72):
     evaluation_start = bundle.start + timedelta(days=bundle.test_days[0])
     evaluation_end = evaluation_start + timedelta(days=window_days)
     files = [f for f in bundle.files if f.created_at < evaluation_end]
@@ -55,20 +56,29 @@ def run_graph_tiering(bundle, hot_idle_hours=(6, 24, 72, 168, 336), k=5,
         return {**result.metrics.model_dump(mode="json"),
                 **(policy.report() if policy is not None else {})}
 
+    sizes = {f.file_id: f.size_bytes for f in files}
+    total_bytes = sum(sizes.values())
+    variants = {"recency": (None, 0), f"graph_k{k}": (graph, k),
+                f"random_k{k}": (random_graph, k)}
     runs = {"all_cold": simulate(None)}
-    for idle in hot_idle_hours:
-        runs[f"recency_idle{idle}h"] = simulate(
-            GraphPrefetchPolicy(None, k=0, hot_idle_hours=idle))
-        runs[f"graph_k{k}_idle{idle}h"] = simulate(
-            GraphPrefetchPolicy(graph, k=k, hot_idle_hours=idle))
-        runs[f"random_k{k}_idle{idle}h"] = simulate(
-            GraphPrefetchPolicy(random_graph, k=k, hot_idle_hours=idle))
+    for idle in hot_idle_hours:  # uncapped: idle timeout is the only cost lever
+        for name, (g, kk) in variants.items():
+            runs[f"{name}_idle{idle}h"] = simulate(
+                GraphPrefetchPolicy(g, k=kk, hot_idle_hours=idle))
+    capped = {}
+    for fraction in capacity_fractions:  # HOT capped at a share of stored bytes
+        cap = int(total_bytes * fraction)
+        for name, (g, kk) in variants.items():
+            capped[f"{name}_cap{round(fraction * 100)}pct"] = simulate(GraphPrefetchPolicy(
+                g, k=kk, hot_idle_hours=capped_idle_hours,
+                hot_capacity_bytes=cap, sizes=sizes))
     return {"dataset": bundle.label, "stats": bundle.stats,
             "evaluation_window": [evaluation_start.isoformat(), evaluation_end.isoformat()],
             "graph": {**graph.stats(), "k": k, "min_similarity": min_similarity,
                       "edge_rule": "shared access_group and TF-IDF cosine >= min_similarity; "
                                    "neighbors filtered to files created by access time"},
-            "runs": runs}
+            "total_bytes": total_bytes, "capped_idle_hours": capped_idle_hours,
+            "runs": runs, "capped_runs": capped}
 
 
 def main():
@@ -85,13 +95,15 @@ def main():
         path = args.output / f"graph_tiering_{bundle.suffix}.json"
         path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
         print(path)
-        for name, run in report["runs"].items():
+        for name, run in {**report["runs"], **report["capped_runs"]}.items():
             print(f"  {name:24s} hit {run['cache_hit_rate']:.3f}  "
                   f"first-touch-hot {run.get('first_touch_hot_rate', 0):.3f}  "
                   f"lat {run['avg_access_latency_ms']:9.0f}ms  "
                   f"storage {run['total_storage_cost']:.3f}  "
                   f"migr {run['total_migrations']:5d}  "
-                  f"prefetch-prec {run.get('prefetch_precision', 0):.2f}")
+                  f"prefetch-prec {run.get('prefetch_precision', 0):.2f}  "
+                  f"evict {run.get('evictions', 0):5d}  "
+                  f"peakHOT {run.get('peak_hot_bytes', 0) / 1e9:6.1f}GB")
 
 
 if __name__ == "__main__":

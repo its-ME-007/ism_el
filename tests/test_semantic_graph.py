@@ -66,3 +66,47 @@ def test_simulator_serves_prefetched_first_touch_from_hot():
     assert recency_metrics.cache_hit_rate == 0.0  # both first touches hit COLD
     assert graph_metrics.cache_hit_rate == 0.5    # b was prefetched by a's access
     assert graph_policy.report()["prefetch_precision"] == 1.0
+
+
+def test_hot_capacity_evicts_lru_and_never_lets_prefetch_evict():
+    files = [_file(f, ["p1"]) for f in ("a", "b", "c")]
+    graph = SemanticGraph(files, {f: np.array([1.0]) for f in ("a", "b", "c")})
+    sizes = {"a": 40, "b": 40, "c": 40}
+    policy = GraphPrefetchPolicy(graph, k=5, hot_capacity_bytes=100, sizes=sizes)
+    tiers = {f: Tier.COLD for f in sizes}
+    moves = policy.on_access("a", T0, tiers)
+    # a admitted; b fits; c does not fit, so prefetch lands in WARM, not HOT.
+    assert moves == [("a", Tier.HOT), ("b", Tier.HOT), ("c", Tier.WARM)]
+    tiers.update(moves)
+    # A direct read of c evicts the unread prefetch b before a, which was read,
+    # even though a was touched longer ago.
+    policy.last_touch["a"] = T0 - timedelta(hours=5)
+    moves = policy.on_access("c", T0 + timedelta(hours=1), tiers)
+    assert moves[:2] == [("b", Tier.WARM), ("c", Tier.HOT)]
+    tiers.update(moves)
+    # Among files that were read, the least recently touched goes first.
+    policy.sizes["d"] = 40
+    tiers["d"] = Tier.COLD
+    assert policy.on_access("d", T0 + timedelta(hours=2), tiers)[:2] == [
+        ("a", Tier.WARM), ("d", Tier.HOT)]
+    assert policy.hot_bytes <= 100 and policy.counts["evictions"] == 2
+    # A file bigger than the whole cap is served from WARM.
+    big = GraphPrefetchPolicy(None, k=0, hot_capacity_bytes=10, sizes={"x": 50})
+    assert big.on_access("x", T0, {"x": Tier.COLD}) == [("x", Tier.WARM)]
+
+
+def test_incremental_add_matches_batch_build():
+    rng = np.random.default_rng(0)
+    files = [_file(f"f{i}", [f"g{i % 3}", "all"] if i % 4 else [f"g{i % 3}"])
+             for i in range(30)]
+    vectors = {f.file_id: rng.random(6) for f in files}
+    batch = SemanticGraph(files, vectors, min_similarity=0.5, max_degree=8)
+    incremental = SemanticGraph(files[:10], vectors, min_similarity=0.5, max_degree=8)
+    for file in files[10:]:
+        incremental.add_node(file, vectors[file.file_id])
+    for file in files:
+        assert {n for n, _ in incremental.edges[file.file_id]} == \
+            {n for n, _ in batch.edges[file.file_id]}
+    incremental.remove_node("f5")
+    assert "f5" not in incremental.edges
+    assert all("f5" not in [n for n, _ in edges] for edges in incremental.edges.values())
