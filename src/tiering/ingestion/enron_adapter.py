@@ -59,6 +59,9 @@ class EnronBundle:
     test_days: list[int]
     max_sample_age_days: int | None = None
     stats: dict = field(default_factory=dict)
+    suffix: str = "enron"
+    label: str = "Enron email corpus (real text + participant access groups)"
+    note: str | None = None
 
     @property
     def validation_day(self) -> int:

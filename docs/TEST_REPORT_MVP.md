@@ -195,6 +195,38 @@ an email's arrival. The controller needs two consistent daily predictions
 The simulator uses configured tier latencies, not measured ones. The cost
 evaluation above is the primary placement result.
 
+## Production-shaped synthetic store (coupling sweep)
+
+`src/tiering/ingestion/production_synth.py` generates a file store with
+projects, project lifecycles, reactivation bursts, heavy-tailed popularity,
+age decay, a working-hours cycle, MB-GB sizes, project topic text and
+project/department ACL groups. `coupling` is the share of each file's demand
+that follows its project's shared schedule; `coupling=0` is the negative
+control. 50 projects, 1,811 files, 120 days, about 217k accesses; seed 42;
+200 bootstrap resamples; one seed per coupling.
+
+```powershell
+python -m src.tiering.experiments.product_ablation --prod-synth --coupling 0.5
+```
+
+Any-access ROC-AUC, all files:
+
+| Coupling | P | A | C | D | C-A | D-C |
+|---|---:|---:|---:|---:|---:|---:|
+| 0 (control) | 0.854 | 0.909 | 0.907 | 0.907 | -0.001 | -0.001 |
+| 0.5 | 0.819 | 0.861 | 0.866 | 0.868 | +0.004 | +0.002 |
+| 0.8 | 0.821 | 0.867 | 0.870 | 0.867 | +0.003 | -0.003 |
+
+The control behaves: no C or D gain at coupling 0. With coupling, gains are
+consistent across resamples but small (tier macro-F1 +0.02 to +0.04). Retrieval
+finds the right neighbors (93.5% of top-5 neighbors share the query's project
+at coupling 0.8), yet neighbor heat barely correlates with the next-24h target
+(0.04, against 0.45 for the file's own 24h count). When a project's files
+move together, each file's own history already carries the project signal, so
+per-file neighbor features are redundant. Retrieval context can only add
+information where neighbors lead the file (new files, lagged spread) or where
+the policy acts on the group, not as extra columns in a per-file model.
+
 ## MVP verification
 
 ```powershell

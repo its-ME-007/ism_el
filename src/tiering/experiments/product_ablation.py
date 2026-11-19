@@ -368,8 +368,8 @@ def run_product_ablation(
                                        [data_bundle.validation_day]))
         test_days = list(getattr(data_bundle, "test_days", [data_bundle.test_day]))
         max_age_days = getattr(data_bundle, "max_sample_age_days", None)
-        suffix = "enron"
-        dataset_label = "Enron email corpus (real text + participant access groups)"
+        suffix = getattr(data_bundle, "suffix", "enron")
+        dataset_label = getattr(data_bundle, "label", "Enron email corpus")
 
     events_by_file = defaultdict(list)
     for event in traces:
@@ -478,7 +478,7 @@ def run_product_ablation(
     # Persist the exact cutoff-time rows used by the matched A/B/C experiment.
     # Identifiers and future labels stay outside the feature groups.
     example_name = ("product_cutoff_examples.jsonl" if data_bundle is None
-                    else "enron_cutoff_examples.jsonl")
+                    else f"{suffix}_cutoff_examples.jsonl")
     example_path = Path("results/datasets") / example_name
     example_path.parent.mkdir(parents=True, exist_ok=True)
     split_samples = (
@@ -805,6 +805,7 @@ def run_product_ablation(
             "future demand. The unseen-file score uses IDs excluded from model fitting; "
             "the known-file score evaluates a later period for training identities."
             if data_bundle is None else
+            getattr(data_bundle, "note", None) or
             "Real Enron corpus: content and access_groups are genuine and "
             "content-correlated (participants share topics). Access events are a "
             "participant re-engagement PROXY for file access, optionally densified for "
@@ -899,8 +900,18 @@ def main():
                         help="Synthetic access floor for sparse docs; 0 = all real")
     parser.add_argument("--proxy", choices=["thread", "participant"], default="thread")
     parser.add_argument("--bootstrap-reps", type=int, default=1000)
+    parser.add_argument("--prod-synth", action="store_true",
+                        help="Production-shaped synthetic store (see production_synth)")
+    parser.add_argument("--coupling", type=float, default=0.8,
+                        help="--prod-synth: share of demand following project activity")
+    parser.add_argument("--seed", type=int, default=42, help="--prod-synth generator seed")
     args = parser.parse_args()
-    if args.enron is None:
+    if args.prod_synth:
+        from src.tiering.ingestion.production_synth import generate_production_bundle
+        bundle = generate_production_bundle(coupling=args.coupling, seed=args.seed)
+        print(json.dumps(run_product_ablation(
+            data_bundle=bundle, bootstrap_reps=args.bootstrap_reps), indent=2))
+    elif args.enron is None:
         print(json.dumps(run_product_ablation(), indent=2))
     else:
         print(json.dumps(run_enron_ablation(
