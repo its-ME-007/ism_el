@@ -104,6 +104,15 @@ def _make_samples(files, events_by_file, days, file_ids, start, extractor,
     return samples
 
 
+TIER_CONFIGS = {
+    Tier.HOT: {"latency_ms": 1.0, "cost_per_gb_month": 0.02,
+               "capacity_gb": 1000.0, "throughput_mbps": 1000.0},
+    Tier.WARM: {"latency_ms": 10.0, "cost_per_gb_month": 0.01,
+                "capacity_gb": 10000.0, "throughput_mbps": 100.0},
+    Tier.COLD: {"latency_ms": 100.0, "cost_per_gb_month": 0.001,
+                "capacity_gb": 100000.0, "throughput_mbps": 10.0},
+}
+
 def _matrix(samples, names, semantic_by_file=None):
     rows = []
     for sample in samples:
@@ -587,14 +596,7 @@ def run_product_ablation(
         }
         artifacts[run_name] = artifact
 
-    tier_configs = {
-        Tier.HOT: {"latency_ms": 1.0, "cost_per_gb_month": 0.02,
-                   "capacity_gb": 1000.0, "throughput_mbps": 1000.0},
-        Tier.WARM: {"latency_ms": 10.0, "cost_per_gb_month": 0.01,
-                    "capacity_gb": 10000.0, "throughput_mbps": 100.0},
-        Tier.COLD: {"latency_ms": 100.0, "cost_per_gb_month": 0.001,
-                    "capacity_gb": 100000.0, "throughput_mbps": 10.0},
-    }
+    tier_configs = TIER_CONFIGS
     evaluation_start = start + timedelta(days=test_days[0])
     # Simulate 28 days from the first test cutoff (or to the end of the trace):
     # SimPy makes one single-row prediction per file per day, so the full Enron

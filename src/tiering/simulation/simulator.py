@@ -19,6 +19,9 @@ class SimPySimulator:
         self.tiers = tiers or {}
         self.migration_controller = migration_controller
         self.feature_provider = self.config.get("feature_provider")
+        # Optional event-driven policy: on_access(file_id, now, tiers) and
+        # on_tick(now, tiers) each return [(file_id, new_tier), ...].
+        self.access_policy = self.config.get("access_policy")
 
     def run(self, files, traces, classifier=None):
         started = time.perf_counter()
@@ -49,6 +52,20 @@ class SimPySimulator:
                  "last_seconds": 0.0}
         interval_seconds = float(self.config.get("decision_interval_hours", 1.0)) * 3600
         next_decision = max(interval_seconds, evaluation_start_seconds)
+        policy = self.access_policy
+
+        def apply(moves):
+            for file_id, target in moves:
+                source = tiers[file_id]
+                if Tier(target) == Tier(source):
+                    continue
+                tiers[file_id] = Tier(target)
+                state["migrations"].append(MigrationDecision(
+                    file_id=file_id, current_tier=source, recommended_tier=target,
+                    confidence=1.0, rationale="access policy"))
+                if self.migration_controller is not None:
+                    state["migration_cost"] += self.migration_controller.get_migration_cost(
+                        files_by_id[file_id].size_bytes, source, target).total_cost
 
         def snapshot(seconds):
             nonlocal next_decision
@@ -71,6 +88,8 @@ class SimPySimulator:
             if decision_time < (evaluation_start or origin):
                 next_decision += interval_seconds
                 return
+            if policy is not None:
+                apply(policy.on_tick(decision_time, tiers))
             if classifier is None or self.migration_controller is None:
                 next_decision += interval_seconds
                 return
@@ -110,6 +129,8 @@ class SimPySimulator:
                     transfer_ms = (event.size_bytes or file.size_bytes) * 8 / (throughput * 1_000_000) * 1000
                     state["latencies"].append(float(cfg.get("latency_ms", 0.0)) + transfer_ms)
                     state["hot"] += tier == Tier.HOT
+                    if policy is not None:
+                        apply(policy.on_access(event.file_id, event.timestamp, tiers))
                 history[event.file_id].append(event)
             snapshot((events[-1].timestamp - origin).total_seconds())
 

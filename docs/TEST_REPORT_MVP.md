@@ -227,6 +227,44 @@ per-file neighbor features are redundant. Retrieval context can only add
 information where neighbors lead the file (new files, lagged spread) or where
 the policy acts on the group, not as extra columns in a per-file model.
 
+## Semantic graph tiering (group prefetch)
+
+`src/tiering/semantic/graph.py` builds a file graph: an edge joins two files
+that share an ACL group, weighted by TF-IDF cosine (>= 0.3, up to 50 edges per
+node), with neighbors filtered to files that exist at access time.
+`GraphPrefetchPolicy` promotes an accessed file to HOT, pre-promotes its top-5
+neighbors, and demotes idle files HOT -> WARM (after the HOT idle timeout) ->
+COLD (after 168 h). Same policy with `k=0` is plain recency. A random-neighbor
+graph over the same ACL pools is the control for "semantics" vs "same people".
+Same 28-day window as the ablation SimPy run, all tiers start COLD.
+
+```powershell
+python -m src.tiering.experiments.graph_tiering --coupling 0.0 0.5 0.8
+```
+
+Coupling 0.8 (storage cost in configured units; first-touch = the file's first
+access in the window):
+
+| Policy (HOT idle) | HOT hit | First touch from HOT | Mean latency (ms) | Storage | Prefetch precision |
+|---|---:|---:|---:|---:|---:|
+| Recency 24 h | 0.946 | 0.000 | 3,723 | 0.888 | - |
+| Recency 336 h | 0.978 | 0.000 | 3,223 | 1.194 | - |
+| Random group 6 h | 0.936 | 0.464 | 2,347 | 1.518 | 0.17 |
+| Semantic graph 6 h | 0.949 | 0.526 | 2,063 | 1.260 | 0.26 |
+| Semantic graph 24 h | 0.985 | 0.623 | 1,762 | 1.429 | 0.25 |
+
+- Group prefetch turns 50-70% of first touches into HOT hits; recency can never
+  serve a first touch from HOT. Mean latency roughly halves, because cold
+  first reads of large files dominate latency. Recency plateaus near 0.98 hit
+  rate and about 3.2 s mean latency even at a 336 h timeout.
+- It costs storage: about +40-60% over recency at the same timeout.
+- Semantic edges beat random edges over the same ACL groups at every timeout:
+  about 15-20% less storage, 5-12% lower latency, prefetch precision 0.25-0.29
+  vs 0.17-0.20. At coupling 0 the semantic advantage narrows (equal precision
+  from 24 h up) but storage stays lower.
+- Limits: synthetic trace, one seed, no HOT capacity limit, configured tier
+  latencies and costs, and the storage charge uses end-of-interval placement.
+
 ## MVP verification
 
 ```powershell
