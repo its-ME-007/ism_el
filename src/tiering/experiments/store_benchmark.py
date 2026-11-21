@@ -1,7 +1,7 @@
 """End-to-end benchmark of TieredStore on a replayed production-shaped trace.
 
 Files that exist before the window are put at their creation time (with
-hourly ticks), then the window's puts (new files) and gets (trace accesses)
+hourly ticks; op-free stretches are jumped), then the window's puts (new files) and gets (trace accesses)
 are replayed in time order through the real on-disk store. Payload bytes are
 scaled down by ``scale`` so the benchmark fits on a laptop disk; latency is
 modelled from each file's real size and the tier that served it, using the
@@ -56,16 +56,22 @@ def replay(bundle, root: Path, k: int, cap_fraction: float | None,
         if next_tick is None:
             next_tick = when + timedelta(hours=1)
         while when >= next_tick:
-            t = time.perf_counter()
-            store.tick(next_tick)
-            timing["tick"][0] += 1
-            timing["tick"][1] += time.perf_counter() - t
+            # Op-free hours (e.g. years between old revisions) are jumped: tick
+            # demotes at most one step, so two ticks at the gap's last hour
+            # give the same placement as ticking every hour through it.
+            skip = (when - next_tick) // timedelta(hours=1)
+            next_tick += timedelta(hours=skip)
+            for _ in range(2 if skip else 1):
+                t = time.perf_counter()
+                store.tick(next_tick)
+                timing["tick"][0] += 1
+                timing["tick"][1] += time.perf_counter() - t
             next_tick += timedelta(hours=1)
         file = by_id[file_id]
         t = time.perf_counter()
         if op == "put":
             store.put(file_id, b"\0" * payload[file_id], groups=file.metadata["access_groups"],
-                      text=file.content, now=when)
+                      now=when)
         else:
             tier = store.tier_of(file_id)
             store.get(file_id, now=when)
@@ -95,20 +101,42 @@ def replay(bundle, root: Path, k: int, cap_fraction: float | None,
     }
 
 
+RUNS = {"recency": (0, None), "coaccess_k5": (5, None),
+        "recency_cap5pct": (0, 0.05), "coaccess_k5_cap5pct": (5, 0.05)}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--coupling", type=float, default=0.8)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--window-days", type=int, default=7)
     parser.add_argument("--output", type=Path, default=Path("results/metrics"))
+    parser.add_argument("--scale", type=int, default=10_000,
+                        help="divide payload bytes by this (latency uses real sizes)")
+    parser.add_argument("--wikipedia", action="store_true",
+                        help="use the fetched Wikipedia store (wikipedia_store) instead")
+    parser.add_argument("--start", default="2026-11-08", help="--wikipedia: fetch start")
+    parser.add_argument("--days", type=int, default=8, help="--wikipedia: fetched days")
+    parser.add_argument("--target-events", type=int, default=55_000,
+                        help="--wikipedia: thin pageviews to about this many events")
+    parser.add_argument("--runs", nargs="+", choices=list(RUNS), default=list(RUNS))
     args = parser.parse_args()
-    bundle = generate_production_bundle(coupling=args.coupling, seed=args.seed)
+    if args.wikipedia:
+        from datetime import datetime, timezone
+        from src.tiering.ingestion.wikipedia_store import load_wikipedia_bundle
+        bundle = load_wikipedia_bundle(
+            datetime.fromisoformat(args.start).replace(tzinfo=timezone.utc), args.days,
+            target_events=args.target_events)
+    else:
+        bundle = generate_production_bundle(coupling=args.coupling, seed=args.seed)
     results = {}
-    for name, k, cap in (("recency", 0, None), ("graph_k5", 5, None),
-                         ("recency_cap5pct", 0, 0.05), ("graph_k5_cap5pct", 5, 0.05)):
+    args.output.mkdir(parents=True, exist_ok=True)
+    path = args.output / f"store_benchmark_{bundle.suffix}_coaccess.json"  # keeps the semantic-era file
+    for name in args.runs:
+        k, cap = RUNS[name]
         root = Path(tempfile.mkdtemp(prefix=f"store-{name}-"))
         try:
-            results[name] = replay(bundle, root, k, cap, args.window_days)
+            results[name] = replay(bundle, root, k, cap, args.window_days, args.scale)
         finally:
             shutil.rmtree(root, ignore_errors=True)
         r = results[name]
@@ -117,10 +145,9 @@ def main():
               f"put {r['mean_ms_per_op']['put']}ms tick {r['mean_ms_per_op']['tick']}ms "
               f"cap-ok {r['cap_respected']} misplaced {len(r['misplaced_after_replay'])}",
               flush=True)
-    args.output.mkdir(parents=True, exist_ok=True)
-    path = args.output / f"store_benchmark_{bundle.suffix}.json"
-    path.write_text(json.dumps({"dataset": bundle.label, "window_days": args.window_days,
-                                "runs": results}, indent=2) + "\n", encoding="utf-8")
+        # written after every run so a killed benchmark keeps what finished
+        path.write_text(json.dumps({"dataset": bundle.label, "window_days": args.window_days,
+                                    "runs": results}, indent=2) + "\n", encoding="utf-8")
     print(path)
 
 

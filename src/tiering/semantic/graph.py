@@ -9,7 +9,9 @@ top-k that already existed at ``now``, so the graph never exposes later files.
 ``GraphPrefetchPolicy`` plugs into ``SimPySimulator(config={"access_policy": ...})``:
 an access promotes the file to HOT and pre-promotes its top-k neighbors; files
 idle past a timeout demote HOT -> WARM -> COLD. With ``k=0`` it is plain
-recency tiering, which isolates what the graph adds.
+recency tiering, which isolates what the graph adds. Any graph with the same
+``neighbors``/``stats`` works; ``src.tiering.coaccess.CoAccessGraph`` learns
+its links from read timing instead of text.
 """
 
 from __future__ import annotations
@@ -116,14 +118,27 @@ class GraphPrefetchPolicy:
     otherwise they land in WARM, so prefetch never evicts a file that was read.
     The policy tracks HOT occupancy from the moves it returns, so the caller
     must apply every move (the simulator and TieredStore both do).
+
+    With ``tier_configs`` set, a neighbor is prefetched only when it breaks
+    even in I/O-ms (the simulator's unit for read latency and migration cost).
+    A useful prefetch saves one read's latency gap; that move would have
+    happened on the read anyway. A wasted one costs a move up plus a move back:
+
+        confidence * (read_ms(current) - read_ms(target))
+            > (1 - confidence) * (move_ms(current, target) + move_ms(target, current))
+
+    ``confidence`` is the graph's score (CoAccessGraph: P(read within lag));
+    fallback neighbors score 0 and so never pass.
     """
 
     def __init__(self, graph: SemanticGraph | None, k: int = 5,
                  prefetch_tier: Tier = Tier.HOT, hot_idle_hours: float = 24.0,
                  warm_idle_hours: float = 168.0, useful_window_hours: float = 24.0,
                  hot_capacity_bytes: int | None = None,
-                 sizes: Mapping[str, int] | None = None):
+                 sizes: Mapping[str, int] | None = None,
+                 tier_configs: Mapping | None = None):
         self.graph, self.k, self.prefetch_tier = graph, k, Tier(prefetch_tier)
+        self.tier_configs = tier_configs
         self.hot_idle = timedelta(hours=hot_idle_hours)
         self.warm_idle = timedelta(hours=warm_idle_hours)
         self.useful_window = timedelta(hours=useful_window_hours)
@@ -136,7 +151,24 @@ class GraphPrefetchPolicy:
         self.seen: set[str] = set()
         self.counts = {"accesses": 0, "first_touch": 0, "first_touch_hot": 0,
                        "prefetches": 0, "prefetches_to_warm": 0,
-                       "useful_prefetches": 0, "evictions": 0}
+                       "useful_prefetches": 0, "evictions": 0, "rejected_prefetches": 0}
+
+    def _read_ms(self, size, tier):
+        cfg = self.tier_configs[tier]
+        return cfg["latency_ms"] + size * 8 / (cfg["throughput_mbps"] * 1e6) * 1000
+
+    def _move_ms(self, size, source, dest):  # same formula as MigrationController
+        src, dst = self.tier_configs[source], self.tier_configs[dest]
+        return (abs(dst["latency_ms"] - src["latency_ms"])
+                + size * 8 / (src["throughput_mbps"] * 1e6) * 1000)
+
+    def _breaks_even(self, file_id, confidence, current, target):
+        if self.tier_configs is None:
+            return True
+        size = self.sizes.get(file_id, 0)
+        saving = self._read_ms(size, current) - self._read_ms(size, target)
+        wasted = self._move_ms(size, current, target) + self._move_ms(size, target, current)
+        return confidence * saving > (1 - confidence) * wasted
 
     def _sync(self, tiers):
         if self.hot is None:
@@ -187,18 +219,24 @@ class GraphPrefetchPolicy:
         if fetched is not None and now - fetched <= self.useful_window:
             self.counts["useful_prefetches"] += 1
         self.last_touch[file_id] = now
+        if hasattr(self.graph, "observe"):  # learned graphs (CoAccessGraph) see every read
+            self.graph.observe(file_id, now)
         moves: list[tuple[str, Tier]] = []
         self._admit(moves, file_id, now)
         if self.graph is None or not self.k:
             return moves
-        for neighbor, _ in self.graph.neighbors(file_id, now, self.k):
-            self.last_touch[neighbor] = now
+        for neighbor, score in self.graph.neighbors(file_id, now, self.k):
             pending = dict(moves)
             current = Tier(pending.get(neighbor, tiers[neighbor]))
             target = self.prefetch_tier
             if (target == Tier.HOT and neighbor not in self.hot
                     and not self._fits(self.sizes.get(neighbor, 0))):
                 target = Tier.WARM
+            if (_RANK[current] > _RANK[target]
+                    and not self._breaks_even(neighbor, score, current, target)):
+                self.counts["rejected_prefetches"] += 1
+                continue  # rejected: not even touched, so it ages out like any file
+            self.last_touch[neighbor] = now
             if _RANK[current] > _RANK[target]:
                 self._move(moves, neighbor, target)
                 self.prefetched_at[neighbor] = now

@@ -1,17 +1,18 @@
-"""Semantic tiered file store (MVP) on local tier directories.
+"""Tiered file store (MVP) on local tier directories.
 
 Layout under ``root``:
 
 - ``hot/``, ``warm/``, ``cold/``: file bytes, one file per id. Each tier
   directory can be pointed elsewhere (e.g. COLD on a NAS or HDD mount).
-- ``index.json``: config plus per-file tier, size, ACL groups, text and
-  timestamps (including the policy's last-touch time).
+- ``index.json``: config plus per-file tier, size, ACL groups and
+  timestamps (including the policy's last-touch time). No file content.
 - ``access_log.jsonl``: every put/get with the tier that served it, for replay
   and retraining.
 
-Placement is decided by ``GraphPrefetchPolicy`` over a ``SemanticGraph`` built
-from the stored text: a put or get promotes the file and prefetches its
-ACL-sharing semantic neighbors; ``tick`` demotes idle files. Moves are
+Placement is decided by ``GraphPrefetchPolicy`` over a ``CoAccessGraph``
+learned from read timing (rebuilt from ``access_log.jsonl`` on open): a put or
+get promotes the file and prefetches same-ACL-group files that usually get read
+next; ``tick`` demotes idle files. Moves are
 ``shutil.move`` between tier directories (a rename on the same volume).
 """
 
@@ -24,15 +25,15 @@ from pathlib import Path
 import re
 import shutil
 import tempfile
-from types import SimpleNamespace
 
+from src.tiering.coaccess import CoAccessGraph
 from src.tiering.ingestion.schemas import Tier
-from src.tiering.semantic.graph import GraphPrefetchPolicy, SemanticGraph
-from src.tiering.semantic.tfidf_extractor import TFIDFExtractor
+from src.tiering.semantic.graph import GraphPrefetchPolicy
 
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,199}")
-DEFAULTS = {"hot_capacity_bytes": None, "k": 5, "min_similarity": 0.3,
-            "hot_idle_hours": 24.0, "warm_idle_hours": 168.0, "tier_dirs": {}}
+DEFAULTS = {"hot_capacity_bytes": None, "k": 5, "lag_hours": 1.0, "min_support": 2,
+            "min_confidence": 0.0, "hot_idle_hours": 24.0, "warm_idle_hours": 168.0,
+            "tier_dirs": {}}
 
 
 def _now(now=None):
@@ -72,6 +73,10 @@ class TieredStore:
             self.index = json.loads(self.index_path.read_text(encoding="utf-8"))
         else:
             self.index = {"config": dict(DEFAULTS), "files": {}}
+        for key, value in DEFAULTS.items():  # indexes from older versions
+            self.index["config"].setdefault(key, value)
+        for entry in self.files.values():
+            entry.pop("text", None)  # older indexes stored content; never needed now
         self.index["config"].update({k: v for k, v in overrides.items() if v is not None})
         config = self.index["config"]
         self.dirs = {tier: Path(config["tier_dirs"].get(tier.value,
@@ -80,7 +85,6 @@ class TieredStore:
         for directory in self.dirs.values():
             directory.mkdir(parents=True, exist_ok=True)
         self._policy = None
-        self._tfidf, self._fitted_count = None, 0
         self._save()
 
     @property
@@ -88,21 +92,16 @@ class TieredStore:
         return self.index["files"]
 
     # -- public API -------------------------------------------------------
-    def put(self, file_id: str, data: bytes, groups=(), text: str | None = None,
+    def put(self, file_id: str, data: bytes, groups=(),
             now: datetime | None = None) -> Tier:
         """Store or replace a file; a write counts as an access."""
         file_id, now = _check_id(file_id), _now(now)
         old = self.files.get(file_id)
-        if text is None:
-            try:
-                text = data.decode("utf-8")
-            except UnicodeDecodeError:
-                text = ""  # binary: no semantic edges unless text is supplied
         tier = Tier(old["tier"]) if old else Tier.COLD
         _write_atomic(self._path(file_id, tier), data)
         self.files[file_id] = {
             "tier": tier.value, "size": len(data), "groups": sorted(set(groups)),
-            "text": text[:20000], "modified_at": now.isoformat(),
+            "modified_at": now.isoformat(),
             "created_at": old["created_at"] if old else now.isoformat(),
             "last_touch": old.get("last_touch") if old else None,
         }
@@ -168,21 +167,21 @@ class TieredStore:
         if self._policy is not None:
             return self._policy
         config = self.index["config"]
-        nodes = [SimpleNamespace(file_id=f, created_at=datetime.fromisoformat(e["created_at"]),
-                                 metadata={"access_groups": e["groups"]})
-                 for f, e in self.files.items()]
         graph = None
-        texts = [e["text"] for e in self.files.values() if e["text"].strip()]
-        self._tfidf, self._fitted_count = None, len(self.files)
-        if len(texts) >= 2 and config["k"]:
-            tfidf = TFIDFExtractor({"max_features": 256, "ngram_range": (1, 2)})
-            try:
-                tfidf.fit(texts)
-                vectors = {f: tfidf.transform([e["text"]])[0] for f, e in self.files.items()}
-                graph = SemanticGraph(nodes, vectors, min_similarity=config["min_similarity"])
-                self._tfidf = tfidf
-            except ValueError:  # e.g. every text is stop words
-                graph = None
+        if config["k"]:
+            graph = CoAccessGraph({f: e["groups"] for f, e in self.files.items()},
+                                  lag_hours=config["lag_hours"],
+                                  min_support=config["min_support"],
+                                  min_confidence=config["min_confidence"])
+            # ponytail: relearns from the whole log on open, O(log size); persist
+            # the counts if the log grows past a few million lines.
+            if self.log_path.exists():
+                with self.log_path.open(encoding="utf-8") as log:
+                    for line in log:
+                        event = json.loads(line)
+                        if event["file_id"] in self.files:
+                            graph.observe(event["file_id"],
+                                          datetime.fromisoformat(event["timestamp"]))
         policy = GraphPrefetchPolicy(
             graph, k=config["k"], hot_idle_hours=config["hot_idle_hours"],
             warm_idle_hours=config["warm_idle_hours"],
@@ -194,18 +193,13 @@ class TieredStore:
         return policy
 
     def _add_to_graph(self, file_id):
-        """Add a put to the live graph with the current vocabulary; refit the
-        vocabulary and rebuild only once the corpus grew 25% since the last fit."""
+        """Tell the live policy about a new or replaced file."""
         policy = self._policy
-        if (policy is None or policy.graph is None or self._tfidf is None
-                or len(self.files) > max(self._fitted_count * 1.25, self._fitted_count + 1)):
-            self._policy = None
+        if policy is None:
             return
         entry = self.files[file_id]
-        node = SimpleNamespace(file_id=file_id,
-                               created_at=datetime.fromisoformat(entry["created_at"]),
-                               metadata={"access_groups": entry["groups"]})
-        policy.graph.add_node(node, self._tfidf.transform([entry["text"]])[0])
+        if policy.graph is not None:
+            policy.graph.set_groups(file_id, entry["groups"])
         policy.sizes[file_id] = entry["size"]
         policy.hot = None  # resync HOT bytes (a replaced file may have changed size)
 

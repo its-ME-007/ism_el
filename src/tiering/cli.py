@@ -88,7 +88,7 @@ def main(argv=None):
     watch.add_argument("--threshold", type=float, default=0.2)
     watch.add_argument("--min-predictions", type=int, default=50)
 
-    store = subparsers.add_parser("store", help="semantic tiered file store")
+    store = subparsers.add_parser("store", help="tiered file store with co-access prefetch")
     store.add_argument("--root", type=Path, default=Path("data/store"))
     store.add_argument("--hot-capacity-gb", type=float, help="persisted HOT cap")
     store.add_argument("--k", type=int, help="persisted: neighbors prefetched per access")

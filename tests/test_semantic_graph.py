@@ -110,3 +110,16 @@ def test_incremental_add_matches_batch_build():
     incremental.remove_node("f5")
     assert "f5" not in incremental.edges
     assert all("f5" not in [n for n, _ in edges] for edges in incremental.edges.values())
+
+
+def test_break_even_admission_prefetches_only_confident_neighbors():
+    class Stub:
+        def neighbors(self, file_id, now, k):
+            return [("b", 0.9), ("c", 0.1)]
+    policy = GraphPrefetchPolicy(Stub(), k=5, sizes={f: 1000 for f in "abc"}, tier_configs=TIERS)
+    tiers = {"a": Tier.COLD, "b": Tier.COLD, "c": Tier.COLD}
+    moves = policy.on_access("a", T0, tiers)
+    # COLD->HOT saves ~100 ms on a hit; a wasted up+down pair costs ~199 ms:
+    # break-even confidence ~0.67, so 0.9 passes and 0.1 does not.
+    assert moves == [("a", Tier.HOT), ("b", Tier.HOT)]
+    assert policy.counts["rejected_prefetches"] == 1 and "c" not in policy.last_touch

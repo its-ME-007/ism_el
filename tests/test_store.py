@@ -20,15 +20,26 @@ def test_store_put_get_prefetch_tick_and_reopen(tmp_path):
     store.tick(T0 + timedelta(hours=20))
     assert store.tier_of("a.txt") == Tier.COLD
 
+    # b is read right after a twice (put, then get): the link is learned.
     assert store.get("a.txt", now=T0 + timedelta(hours=21)) == LEDGER
+    assert store.tier_of("b.txt") == Tier.COLD   # one follow is not enough support
+    store.get("b.txt", now=T0 + timedelta(hours=21, minutes=10))
+    store.get("c.txt", now=T0 + timedelta(hours=21, minutes=20))
+    store.tick(T0 + timedelta(hours=30))
+    store.tick(T0 + timedelta(hours=40))
+    assert store.tier_of("b.txt") == Tier.COLD
+
+    store.get("a.txt", now=T0 + timedelta(hours=41))
     assert store.tier_of("a.txt") == Tier.HOT
-    assert store.tier_of("b.txt") == Tier.HOT    # similar + same ACL group: prefetched
+    assert store.tier_of("b.txt") == Tier.HOT    # usually read after a, same group
     assert store.tier_of("c.txt") == Tier.COLD   # other group: never a neighbor
     assert (tmp_path / "hot" / "b.txt").exists() and store.verify() == []
+    assert "text" not in store.files["a.txt"]
 
-    reopened = TieredStore(tmp_path)  # index + last-touch survive a restart
+    reopened = TieredStore(tmp_path)  # index, last-touch and learned links survive
     assert reopened.tier_of("b.txt") == Tier.HOT and reopened.get("b.txt") == LEDGER + b" annex"
-    assert len((tmp_path / "access_log.jsonl").read_text().splitlines()) == 5
+    assert reopened.status()["graph"]["edges_min_support"] >= 1
+    assert len((tmp_path / "access_log.jsonl").read_text().splitlines()) == 8
 
 
 def test_store_capacity_rejects_bad_ids_and_repairs_index(tmp_path):
