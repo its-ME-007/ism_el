@@ -1,0 +1,133 @@
+{
+  "dataset": "Production-shaped synthetic file store (coupling=0.5)",
+  "stats": {
+    "generator": "production_synth",
+    "coupling": 0.5,
+    "seed": 42,
+    "projects": 50,
+    "documents": 1811,
+    "access_events_total": 217676,
+    "span_days": 120,
+    "distinct_access_groups": 55
+  },
+  "evaluation_window": [
+    "2025-04-19T00:00:00+00:00",
+    "2025-05-17T00:00:00+00:00"
+  ],
+  "graph": {
+    "nodes": 1811,
+    "edges": 67548,
+    "mean_degree": 37.29872998343457,
+    "isolated": 2,
+    "k": 5,
+    "min_similarity": 0.3,
+    "edge_rule": "shared access_group and TF-IDF cosine >= min_similarity; neighbors filtered to files created by access time"
+  },
+  "runs": {
+    "all_cold": {
+      "total_accesses": 61353,
+      "total_migrations": 0,
+      "avg_access_latency_ms": 116364.69343906899,
+      "p95_access_latency_ms": 466242.25920000003,
+      "total_storage_cost": 0.11298249914574034,
+      "total_migration_cost": 0.0,
+      "cache_hit_rate": 0.0
+    },
+    "recency_idle6h": {
+      "total_accesses": 61353,
+      "total_migrations": 17099,
+      "avg_access_latency_ms": 4555.762587744365,
+      "p95_access_latency_ms": 9250.027664,
+      "total_storage_cost": 0.7878286743105221,
+      "total_migration_cost": 229459830.2069492,
+      "cache_hit_rate": 0.8620931331801216,
+      "accesses": 61353,
+      "first_touch": 1354,
+      "first_touch_hot": 0,
+      "prefetches": 0,
+      "useful_prefetches": 0,
+      "first_touch_hot_rate": 0.0,
+      "prefetch_precision": 0.0
+    },
+    "graph_k5_idle6h": {
+      "total_accesses": 61353,
+      "total_migrations": 29726,
+      "avg_access_latency_ms": 2079.3468637813307,
+      "p95_access_latency_ms": 5356.073767999999,
+      "total_storage_cost": 1.331421248032802,
+      "total_migration_cost": 317069898.1036522,
+      "cache_hit_rate": 0.9489185532899777,
+      "accesses": 61353,
+      "first_touch": 1354,
+      "first_touch_hot": 730,
+      "prefetches": 11911,
+      "useful_prefetches": 3254,
+      "first_touch_hot_rate": 0.5391432791728212,
+      "prefetch_precision": 0.2731928469481991
+    },
+    "recency_idle24h": {
+      "total_accesses": 61353,
+      "total_migrations": 6861,
+      "avg_access_latency_ms": 3752.322442022787,
+      "p95_access_latency_ms": 5658.760856000001,
+      "total_storage_cost": 0.9310967566040532,
+      "total_migration_cost": 168861311.27291214,
+      "cache_hit_rate": 0.9426107932782423,
+      "accesses": 61353,
+      "first_touch": 1354,
+      "first_touch_hot": 0,
+      "prefetches": 0,
+      "useful_prefetches": 0,
+      "first_touch_hot_rate": 0.0,
+      "prefetch_precision": 0.0
+    },
+    "graph_k5_idle24h": {
+      "total_accesses": 61353,
+      "total_migrations": 7476,
+      "avg_access_latency_ms": 1787.555219051978,
+      "p95_access_latency_ms": 5020.282936,
+      "total_storage_cost": 1.497978472356834,
+      "total_migration_cost": 199177986.37837556,
+      "cache_hit_rate": 0.9846788258112887,
+      "accesses": 61353,
+      "first_touch": 1354,
+      "first_touch_hot": 858,
+      "prefetches": 3196,
+      "useful_prefetches": 806,
+      "first_touch_hot_rate": 0.6336779911373708,
+      "prefetch_precision": 0.2521902377972466
+    },
+    "recency_idle72h": {
+      "total_accesses": 61353,
+      "total_migrations": 3556,
+      "avg_access_latency_ms": 3498.79190258315,
+      "p95_access_latency_ms": 5356.073767999999,
+      "total_storage_cost": 1.0632088155624326,
+      "total_migration_cost": 149631244.72974402,
+      "cache_hit_rate": 0.9683308069695044,
+      "accesses": 61353,
+      "first_touch": 1354,
+      "first_touch_hot": 0,
+      "prefetches": 0,
+      "useful_prefetches": 0,
+      "first_touch_hot_rate": 0.0,
+      "prefetch_precision": 0.0
+    },
+    "graph_k5_idle72h": {
+      "total_accesses": 61353,
+      "total_migrations": 3595,
+      "avg_access_latency_ms": 1735.5298722214075,
+      "p95_access_latency_ms": 4817.6128383999985,
+      "total_storage_cost": 1.6149197955889634,
+      "total_migration_cost": 182255725.9181756,
+      "cache_hit_rate": 0.9915244568317768,
+      "accesses": 61353,
+      "first_touch": 1354,
+      "first_touch_hot": 930,
+      "prefetches": 1756,
+      "useful_prefetches": 466,
+      "first_touch_hot_rate": 0.6868537666174298,
+      "prefetch_precision": 0.265375854214123
+    }
+  }
+}

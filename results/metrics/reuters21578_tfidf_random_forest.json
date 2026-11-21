@@ -1,0 +1,600 @@
+{
+  "dataset": "reuters21578",
+  "model": "random_forest",
+  "features": "TF-IDF unigrams and bigrams",
+  "seed": 42,
+  "label_type": "multilabel",
+  "vocabulary_size": 3000,
+  "class_names": [
+    "acq",
+    "alum",
+    "barley",
+    "bop",
+    "can",
+    "carcass",
+    "cocoa",
+    "coconut-oil",
+    "coffee",
+    "copper",
+    "corn",
+    "cotton",
+    "cpi",
+    "cpu",
+    "crude",
+    "dlr",
+    "dmk",
+    "earn",
+    "fuel",
+    "gas",
+    "gnp",
+    "gold",
+    "grain",
+    "groundnut",
+    "heat",
+    "hog",
+    "housing",
+    "income",
+    "interest",
+    "inventories",
+    "ipi",
+    "iron-steel",
+    "jet",
+    "jobs",
+    "lead",
+    "lei",
+    "livestock",
+    "lumber",
+    "meal-feed",
+    "money-fx",
+    "money-supply",
+    "nat-gas",
+    "nickel",
+    "oilseed",
+    "orange",
+    "palm-oil",
+    "pet-chem",
+    "rand",
+    "rapeseed",
+    "reserves",
+    "retail",
+    "rice",
+    "rubber",
+    "ship",
+    "silver",
+    "sorghum",
+    "soy-meal",
+    "soy-oil",
+    "soybean",
+    "stg",
+    "strategic-metal",
+    "sugar",
+    "sunseed",
+    "tea",
+    "tin",
+    "trade",
+    "veg-oil",
+    "wheat",
+    "wpi",
+    "yen",
+    "zinc"
+  ],
+  "eligible_train_records": 2998,
+  "official_train_records": 7733,
+  "training_sample_limit": 3000,
+  "validation_records": 0,
+  "official_test_records": 3008,
+  "test_records": 2999,
+  "excluded_records": 10100,
+  "train_rows_only_with_unmodeled_topics": 2,
+  "unmodeled_labels": [
+    "austdlr",
+    "castor-oil",
+    "castorseed",
+    "citruspulp",
+    "coconut",
+    "copra-cake",
+    "corn-oil",
+    "cornglutenfeed",
+    "cotton-oil",
+    "dfl",
+    "dkr",
+    "fishmeal",
+    "groundnut-oil",
+    "instal-debt",
+    "l-cattle",
+    "lin-meal",
+    "lin-oil",
+    "linseed",
+    "lit",
+    "naphtha",
+    "nkr",
+    "nzdlr",
+    "oat",
+    "palladium",
+    "palmkernel",
+    "peseta",
+    "platinum",
+    "plywood",
+    "pork-belly",
+    "potato",
+    "propane",
+    "rape-meal",
+    "rape-oil",
+    "red-bean",
+    "ringgit",
+    "rupiah",
+    "rye",
+    "saudriyal",
+    "skr",
+    "sun-meal",
+    "sun-oil",
+    "tapioca",
+    "wool"
+  ],
+  "unknown_test_label_occurrences": 42,
+  "validation_metrics": null,
+  "test_metrics": {
+    "micro_f1": 0.7442937479325173,
+    "macro_f1": 0.14833652897209493,
+    "weighted_f1": 0.6582934927752953,
+    "exact_match_accuracy": 0.667889296432144,
+    "hamming_loss": 0.007260636174499481,
+    "per_label": {
+      "acq": {
+        "precision": 0.9315642458100558,
+        "recall": 0.9289693593314763,
+        "f1-score": 0.9302649930264993,
+        "support": 718.0
+      },
+      "alum": {
+        "precision": 1.0,
+        "recall": 0.043478260869565216,
+        "f1-score": 0.08333333333333333,
+        "support": 23.0
+      },
+      "barley": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 14.0
+      },
+      "bop": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 30.0
+      },
+      "can": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 0.0
+      },
+      "carcass": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 18.0
+      },
+      "cocoa": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 18.0
+      },
+      "coconut-oil": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 3.0
+      },
+      "coffee": {
+        "precision": 1.0,
+        "recall": 0.21428571428571427,
+        "f1-score": 0.35294117647058826,
+        "support": 28.0
+      },
+      "copper": {
+        "precision": 1.0,
+        "recall": 0.05555555555555555,
+        "f1-score": 0.10526315789473684,
+        "support": 18.0
+      },
+      "corn": {
+        "precision": 1.0,
+        "recall": 0.17857142857142858,
+        "f1-score": 0.30303030303030304,
+        "support": 56.0
+      },
+      "cotton": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 20.0
+      },
+      "cpi": {
+        "precision": 0.6666666666666666,
+        "recall": 0.07142857142857142,
+        "f1-score": 0.12903225806451613,
+        "support": 28.0
+      },
+      "cpu": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 1.0
+      },
+      "crude": {
+        "precision": 0.9455782312925171,
+        "recall": 0.7473118279569892,
+        "f1-score": 0.8348348348348348,
+        "support": 186.0
+      },
+      "dlr": {
+        "precision": 0.9444444444444444,
+        "recall": 0.38636363636363635,
+        "f1-score": 0.5483870967741935,
+        "support": 44.0
+      },
+      "dmk": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 4.0
+      },
+      "earn": {
+        "precision": 0.9877819548872181,
+        "recall": 0.9722479185938946,
+        "f1-score": 0.9799533799533799,
+        "support": 1081.0
+      },
+      "fuel": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 10.0
+      },
+      "gas": {
+        "precision": 1.0,
+        "recall": 0.058823529411764705,
+        "f1-score": 0.1111111111111111,
+        "support": 17.0
+      },
+      "gnp": {
+        "precision": 1.0,
+        "recall": 0.14285714285714285,
+        "f1-score": 0.25,
+        "support": 35.0
+      },
+      "gold": {
+        "precision": 1.0,
+        "recall": 0.06666666666666667,
+        "f1-score": 0.125,
+        "support": 30.0
+      },
+      "grain": {
+        "precision": 0.9456521739130435,
+        "recall": 0.5878378378378378,
+        "f1-score": 0.725,
+        "support": 148.0
+      },
+      "groundnut": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 4.0
+      },
+      "heat": {
+        "precision": 1.0,
+        "recall": 0.2,
+        "f1-score": 0.3333333333333333,
+        "support": 5.0
+      },
+      "hog": {
+        "precision": 1.0,
+        "recall": 0.3333333333333333,
+        "f1-score": 0.5,
+        "support": 6.0
+      },
+      "housing": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 4.0
+      },
+      "income": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 7.0
+      },
+      "interest": {
+        "precision": 0.9375,
+        "recall": 0.3383458646616541,
+        "f1-score": 0.4972375690607735,
+        "support": 133.0
+      },
+      "inventories": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 0.0
+      },
+      "ipi": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 12.0
+      },
+      "iron-steel": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 14.0
+      },
+      "jet": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 1.0
+      },
+      "jobs": {
+        "precision": 1.0,
+        "recall": 0.1,
+        "f1-score": 0.18181818181818182,
+        "support": 20.0
+      },
+      "lead": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 14.0
+      },
+      "lei": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 3.0
+      },
+      "livestock": {
+        "precision": 1.0,
+        "recall": 0.125,
+        "f1-score": 0.2222222222222222,
+        "support": 24.0
+      },
+      "lumber": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 6.0
+      },
+      "meal-feed": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 19.0
+      },
+      "money-fx": {
+        "precision": 0.8256880733944955,
+        "recall": 0.5,
+        "f1-score": 0.6228373702422145,
+        "support": 180.0
+      },
+      "money-supply": {
+        "precision": 0.8571428571428571,
+        "recall": 0.35294117647058826,
+        "f1-score": 0.5,
+        "support": 34.0
+      },
+      "nat-gas": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 30.0
+      },
+      "nickel": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 1.0
+      },
+      "oilseed": {
+        "precision": 0.8,
+        "recall": 0.0851063829787234,
+        "f1-score": 0.15384615384615385,
+        "support": 47.0
+      },
+      "orange": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 11.0
+      },
+      "palm-oil": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 10.0
+      },
+      "pet-chem": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 12.0
+      },
+      "rand": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 1.0
+      },
+      "rapeseed": {
+        "precision": 1.0,
+        "recall": 0.1111111111111111,
+        "f1-score": 0.2,
+        "support": 9.0
+      },
+      "reserves": {
+        "precision": 1.0,
+        "recall": 0.058823529411764705,
+        "f1-score": 0.1111111111111111,
+        "support": 17.0
+      },
+      "retail": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 2.0
+      },
+      "rice": {
+        "precision": 1.0,
+        "recall": 0.041666666666666664,
+        "f1-score": 0.08,
+        "support": 24.0
+      },
+      "rubber": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 12.0
+      },
+      "ship": {
+        "precision": 0.9473684210526315,
+        "recall": 0.20689655172413793,
+        "f1-score": 0.33962264150943394,
+        "support": 87.0
+      },
+      "silver": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 8.0
+      },
+      "sorghum": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 10.0
+      },
+      "soy-meal": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 13.0
+      },
+      "soy-oil": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 11.0
+      },
+      "soybean": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 33.0
+      },
+      "stg": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 0.0
+      },
+      "strategic-metal": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 11.0
+      },
+      "sugar": {
+        "precision": 1.0,
+        "recall": 0.19444444444444445,
+        "f1-score": 0.32558139534883723,
+        "support": 36.0
+      },
+      "sunseed": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 5.0
+      },
+      "tea": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 4.0
+      },
+      "tin": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 12.0
+      },
+      "trade": {
+        "precision": 0.8676470588235294,
+        "recall": 0.5086206896551724,
+        "f1-score": 0.6413043478260869,
+        "support": 116.0
+      },
+      "veg-oil": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 37.0
+      },
+      "wheat": {
+        "precision": 0.9375,
+        "recall": 0.2112676056338028,
+        "f1-score": 0.3448275862068966,
+        "support": 71.0
+      },
+      "wpi": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 10.0
+      },
+      "yen": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 14.0
+      },
+      "zinc": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 13.0
+      },
+      "micro avg": {
+        "precision": 0.9521794329242488,
+        "recall": 0.6109150149334781,
+        "f1-score": 0.7442937479325173,
+        "support": 3683.0
+      },
+      "macro avg": {
+        "precision": 0.37457090320320363,
+        "recall": 0.1101683775467837,
+        "f1-score": 0.14833652897209493,
+        "support": 3683.0
+      },
+      "weighted avg": {
+        "precision": 0.8282369097245283,
+        "recall": 0.6109150149334781,
+        "f1-score": 0.6582934927752953,
+        "support": 3683.0
+      },
+      "samples avg": {
+        "precision": 0.7273480048905191,
+        "recall": 0.6978119690690548,
+        "f1-score": 0.7058604431395361,
+        "support": 3683.0
+      }
+    }
+  },
+  "model_path": "results\\models\\reuters21578_tfidf_random_forest.joblib",
+  "created_at_utc": "2026-10-27T16:52:00.192135+00:00",
+  "official_topic_count": 114,
+  "modeled_topic_count": 71,
+  "unmodeled_topic_count": 43
+}

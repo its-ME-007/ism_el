@@ -1,0 +1,27 @@
+{
+  "sources": {
+    "pageviews_csv": "data\\raw\\wikipedia\\pageviews_latest_top100.csv",
+    "documents": "data\\processed\\wikipedia_top100_text.jsonl",
+    "join_method": "Unicode NFKC + casefold + URL decode + underscore-to-space + whitespace collapse"
+  },
+  "document_rows_scanned": 100,
+  "unique_pageview_titles": 100,
+  "pageview_observation_rows": 100,
+  "unique_title_matches": 100,
+  "unique_title_ambiguous": 0,
+  "unique_title_unmatched": 0,
+  "observation_rows_uniquely_matched": 100,
+  "observation_rows_ambiguous": 0,
+  "observation_rows_unmatched": 0,
+  "unique_title_match_rate": 1.0,
+  "observation_row_unique_match_rate": 1.0,
+  "matched_observations_with_revision_timestamp": 100,
+  "text_revision_before_target_date_rows": 9,
+  "text_revision_same_day_ambiguous_rows": 8,
+  "text_revision_after_target_date_rows": 83,
+  "text_revision_missing_rows": 0,
+  "no_pre_cutoff_revision_rows": 0,
+  "time_safe_text_rate_among_matched_rows": 0.09,
+  "unmatched_title_examples": [],
+  "interpretation": "This is title-join coverage only. The source records only top-ranked pages; an absent article-day is unknown/censored, not zero views. Title matching does not guarantee historical text exists before the target. For a daily target on date D, a text revision dated before D is considered available at the prior-day cutoff; same-day revisions are ambiguous and pages with no earlier revision have no time-safe semantic text for this observation."
+}

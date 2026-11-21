@@ -13,7 +13,7 @@ __pycache__/
 data/raw/*
 !data/raw/**/SOURCE.md
 data/processed/
-results/
-results/models/
-results/datasets/
+results/*
+# Metric JSONs are tracked: the paper's numbers come from them.
+!results/metrics/
 results/metrics/*.txt

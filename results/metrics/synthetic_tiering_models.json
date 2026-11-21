@@ -1,0 +1,151 @@
+{
+  "dataset": "synthetic enterprise files + generated 30-day workload",
+  "seed": 42,
+  "files": 120,
+  "access_events": 145438,
+  "prediction_window_hours": 24,
+  "training_reference_days": [
+    5,
+    10,
+    15
+  ],
+  "validation_reference_day": 20,
+  "test_reference_day": 26,
+  "training_samples": 360,
+  "validation_samples": 120,
+  "test_samples": 120,
+  "feature_names": [
+    "category=Engineering",
+    "category=Finance",
+    "category=HR",
+    "category=Legal",
+    "category=Marketing",
+    "category=Operations",
+    "category=Research",
+    "category=Security",
+    "category=System",
+    "compressed",
+    "confidentiality=confidential",
+    "confidentiality=internal",
+    "confidentiality=public",
+    "confidentiality=restricted",
+    "content_chars",
+    "created_age_days",
+    "department=Finance",
+    "department=HR",
+    "department=IT",
+    "department=Operations",
+    "file_type=archive",
+    "file_type=database",
+    "file_type=document",
+    "file_type=log",
+    "indexed",
+    "modified_age_days",
+    "size_log_bytes",
+    "workload_access_count_1h",
+    "workload_access_count_24h",
+    "workload_access_count_30d",
+    "workload_access_count_7d",
+    "workload_last_access_hours",
+    "workload_mean_inter_arrival_hours",
+    "workload_periodicity_score",
+    "workload_read_write_ratio",
+    "workload_std_inter_arrival_hours",
+    "workload_time_since_creation_hours"
+  ],
+  "feature_count": 37,
+  "evaluation_note": "Synthetic temporal holdout: files repeat across earlier train snapshots and later test; labels are derived from generated future accesses. This does not measure generalization to unseen organizations or real access traces.",
+  "tier_labels_train": {
+    "HOT": 90,
+    "WARM": 144,
+    "COLD": 126
+  },
+  "tier_labels_test": {
+    "HOT": 30,
+    "WARM": 48,
+    "COLD": 42
+  },
+  "tier_label_rules": {
+    "HOT": ">=50 future accesses/24h",
+    "WARM": "5-49 future accesses/24h",
+    "COLD": "0-4 future accesses/24h"
+  },
+  "validation": {
+    "tier_classifier": {
+      "accuracy": 0.9833333333333333,
+      "macro_f1": 0.9834842694139803
+    },
+    "future_access": {
+      "brier_score": 0.07530009746551514,
+      "roc_auc": 0.890742285237698
+    }
+  },
+  "test": {
+    "tier_classifier": {
+      "accuracy": 1.0,
+      "macro_f1": 1.0,
+      "majority_class_accuracy_baseline": 0.4,
+      "per_class": {
+        "HOT": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 30.0
+        },
+        "WARM": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 48.0
+        },
+        "COLD": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 42.0
+        },
+        "accuracy": 1.0,
+        "macro avg": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 120.0
+        },
+        "weighted avg": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 120.0
+        }
+      }
+    },
+    "future_access": {
+      "brier_score": 0.09533349424600601,
+      "roc_auc": 0.7627272727272726,
+      "average_precision": 0.9746961247091156,
+      "threshold_0_5_f1": 0.9124423963133641,
+      "positive_rate": 0.9166666666666666,
+      "always_positive_accuracy_baseline": 0.9166666666666666
+    }
+  },
+  "simpy_simulation": {
+    "all_cold_baseline": {
+      "total_accesses": 145438,
+      "total_migrations": 0,
+      "avg_access_latency_ms": 3084.3775938998065,
+      "p95_access_latency_ms": 23696.0176,
+      "total_storage_cost": 0.0004655482948108376,
+      "cache_hit_rate": 0.0
+    },
+    "tier_classifier": {
+      "total_accesses": 145438,
+      "total_migrations": 78,
+      "avg_access_latency_ms": 342.0410046728916,
+      "p95_access_latency_ms": 1250.376,
+      "total_storage_cost": 235378.0020328219,
+      "cache_hit_rate": 0.6872069197871258
+    },
+    "tier_classifier_migrations": 78
+  },
+  "model_path": "results\\models\\synthetic_tiering_models.joblib"
+}

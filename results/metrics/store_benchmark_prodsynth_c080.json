@@ -1,0 +1,122 @@
+{
+  "dataset": "Production-shaped synthetic file store (coupling=0.8)",
+  "window_days": 7,
+  "runs": {
+    "recency": {
+      "k": 0,
+      "hot_capacity_fraction": null,
+      "hot_capacity_bytes": null,
+      "files": 1672,
+      "gets": 24208,
+      "puts": 1672,
+      "ops_per_second": {
+        "put": 110.7,
+        "get": 44.6,
+        "tick": 218.8
+      },
+      "mean_ms_per_op": {
+        "put": 9.03,
+        "get": 22.43,
+        "tick": 4.57
+      },
+      "hot_hit_rate": 0.9472901520158625,
+      "first_touch_hot_rate": 0.12781954887218044,
+      "modelled_mean_latency_ms": 3934.7944499659616,
+      "peak_hot_bytes": 7661662,
+      "cap_respected": true,
+      "misplaced_after_replay": [],
+      "final_tiers": {
+        "HOT": 503,
+        "WARM": 439,
+        "COLD": 730
+      }
+    },
+    "graph_k5": {
+      "k": 5,
+      "hot_capacity_fraction": null,
+      "hot_capacity_bytes": null,
+      "files": 1672,
+      "gets": 24208,
+      "puts": 1672,
+      "ops_per_second": {
+        "put": 67.9,
+        "get": 41.9,
+        "tick": 158.5
+      },
+      "mean_ms_per_op": {
+        "put": 14.72,
+        "get": 23.87,
+        "tick": 6.31
+      },
+      "hot_hit_rate": 0.9842614011896894,
+      "first_touch_hot_rate": 0.6723952738990333,
+      "modelled_mean_latency_ms": 1696.2908430284206,
+      "peak_hot_bytes": 13203702,
+      "cap_respected": true,
+      "misplaced_after_replay": [],
+      "final_tiers": {
+        "HOT": 970,
+        "WARM": 452,
+        "COLD": 250
+      }
+    },
+    "recency_cap5pct": {
+      "k": 0,
+      "hot_capacity_fraction": 0.05,
+      "hot_capacity_bytes": 1006926,
+      "files": 1672,
+      "gets": 24208,
+      "puts": 1672,
+      "ops_per_second": {
+        "put": 32.8,
+        "get": 25.6,
+        "tick": 65.8
+      },
+      "mean_ms_per_op": {
+        "put": 30.52,
+        "get": 39.01,
+        "tick": 15.19
+      },
+      "hot_hit_rate": 0.4609220092531395,
+      "first_touch_hot_rate": 0.022556390977443608,
+      "modelled_mean_latency_ms": 8627.29608904329,
+      "peak_hot_bytes": 1006721,
+      "cap_respected": true,
+      "misplaced_after_replay": [],
+      "final_tiers": {
+        "HOT": 60,
+        "WARM": 882,
+        "COLD": 730
+      }
+    },
+    "graph_k5_cap5pct": {
+      "k": 5,
+      "hot_capacity_fraction": 0.05,
+      "hot_capacity_bytes": 1006926,
+      "files": 1672,
+      "gets": 24208,
+      "puts": 1672,
+      "ops_per_second": {
+        "put": 40.7,
+        "get": 48.8,
+        "tick": 107.1
+      },
+      "mean_ms_per_op": {
+        "put": 24.56,
+        "get": 20.48,
+        "tick": 9.34
+      },
+      "hot_hit_rate": 0.508220423000661,
+      "first_touch_hot_rate": 0.07626208378088077,
+      "modelled_mean_latency_ms": 6707.295209058823,
+      "peak_hot_bytes": 1006919,
+      "cap_respected": true,
+      "misplaced_after_replay": [],
+      "final_tiers": {
+        "HOT": 79,
+        "WARM": 1343,
+        "COLD": 250
+      }
+    }
+  }
+}

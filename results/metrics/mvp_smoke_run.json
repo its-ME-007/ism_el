@@ -1,0 +1,21 @@
+{
+  "document_id": "demo-finance-report",
+  "cutoff": "2025-01-21T00:00:00+00:00",
+  "model": "C_combined_synthetic_tfidf",
+  "predicted_tier": "COLD",
+  "tier_probabilities": {
+    "HOT": 0.0018551117973402143,
+    "WARM": 0.004156038165092468,
+    "COLD": 0.9939888715744019
+  },
+  "estimated_accesses_next_24h": 3.949631690979004,
+  "probability_any_access_next_24h": 0.9742932319641113,
+  "feature_groups": [
+    "metadata_workload",
+    "tfidf_semantics"
+  ],
+  "limitations": [
+    "Model was trained on synthetic traces; this output is a prototype recommendation.",
+    "Synthetic access patterns were assigned independently of document meaning."
+  ]
+}

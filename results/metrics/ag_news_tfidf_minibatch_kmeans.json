@@ -1,0 +1,24 @@
+{
+  "dataset": "AG News",
+  "method": "MiniBatchKMeans on TF-IDF",
+  "seed": 42,
+  "fit_records": 5000,
+  "test_records": 7600,
+  "clusters": 4,
+  "vocabulary_size": 5000,
+  "train_cluster_sizes": [
+    3374,
+    835,
+    601,
+    190
+  ],
+  "test_cluster_sizes": [
+    5039,
+    1389,
+    918,
+    254
+  ],
+  "test_adjusted_rand_index": 0.028807603694259814,
+  "test_normalized_mutual_information": 0.052558329088624026,
+  "note": "Clusters were fit on train only; test labels are used only for ARI/NMI evaluation."
+}
