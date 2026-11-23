@@ -38,6 +38,8 @@ Usage units (`usage_units_io_ms`) = total read latency + migration cost, both in
 
 - `results/metrics/graph_tiering_wikipedia_coaccess.json`: primary results, all 9 policies × 5 idle timeouts and 4 HOT caps.
 - `results/metrics/graph_tiering_wikipedia.json`: earlier semantic vs random run.
+- `results/figures/*.pdf|png`: paper figures (latency, migrations, usage and precision against HOT cap, plus the latency/migration trade-off at 5%). Regenerate with `python -m src.tiering.experiments.plot_coaccess` (needs the `visualization` extra). In the latency figure, the co-access and break-even lines overlap because their latency is identical.
+- `docs/coaccess_results.html`: a one-page summary of the results to show in a browser.
 - Code: `src/tiering/coaccess.py`, `src/tiering/semantic/graph.py` (`GraphPrefetchPolicy`), `src/tiering/experiments/graph_tiering.py`, `src/tiering/store.py`.
 
 ## Reproduce
