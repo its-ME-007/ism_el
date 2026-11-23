@@ -67,7 +67,7 @@ ul { padding-left: 1.2em; display: grid; gap: 6px; }
     <ul>
       <li>1,680 Wikipedia articles in 28 categories. Each category acts as an access-control group.</li>
       <li>8 days of hourly pageviews (2026-11-08 to 11-16), thinned to 54,878 reads. Day 1 is warm-up; days 2–8 (48,664 reads) are scored.</li>
-      <li>Three tiers with modelled device latency. The fast (HOT) tier is capped at 2–20% of total bytes.</li>
+      <li>Trace-driven simulation, not a deployment on a real file server. Each read costs 1, 10 or 100 ms on the HOT, WARM or COLD tier, plus transfer at 1,000, 100 or 10 Mbit/s. The HOT tier is capped at 2–20% of total bytes.</li>
       <li><b>Usage</b> = total read latency + migration cost, in millions of device-ms. Lower is better.</li>
     </ul>
   </section>

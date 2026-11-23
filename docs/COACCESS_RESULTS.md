@@ -6,6 +6,18 @@
 
 Tiering policies on a Wikipedia pageview store: 1,680 articles in 28 categories, with each category used as an access-control group. Hourly pageviews over 8 days were thinned to about 55k events. Day 1 is warm-up and days 2–8 (about 48.7k reads) are evaluated. Latency is modelled from `TIER_CONFIGS` in `src/tiering/experiments/product_ablation.py`. One thinning seed (42).
 
+**Latency model (simulation, not a deployment).** The trace is replayed in a SimPy simulator (`src/tiering/simulation/simulator.py`). The policies were not deployed on a real file server, and no latency was measured on hardware. Tier assumptions:
+
+| Tier | Access latency | Throughput | Storage cost |
+|---|---|---|---|
+| HOT | 1 ms | 1,000 Mbit/s | $0.020 / GB-month |
+| WARM | 10 ms | 100 Mbit/s | $0.010 / GB-month |
+| COLD | 100 ms | 10 Mbit/s | $0.001 / GB-month |
+
+- Read latency = tier access latency + size × 8 / (throughput × 10⁶) s.
+- Migration cost = |latency difference between the two tiers| + transfer time at the source tier's throughput (`src/tiering/migration/controller.py`).
+- The config field is named `throughput_mbps`, and `schemas.py` describes it as MB/s, but the code multiplies bytes by 8. In effect it is Mbit/s, and that is how the reported numbers were computed.
+
 - `recency`: promote a file on read, demote it when idle.
 - `random_k5`: also prefetch 5 random files from the same group (the control).
 - `coaccess_k5`: prefetch files that are usually read within 1 h after this one, learned online (`src/tiering/coaccess.py`).
